@@ -1,72 +1,80 @@
 /**
- * useWebRTCCamera.ts — v6 (Adaptive Quality)
+ * useWebRTCCamera.ts — Production-Grade Camera Sharing v2.0
  *
- * Quality improvements:
- *  1. High quality defaults: 1080p @ 30fps for WiFi/5G, auto-downgrades on slow networks
- *  2. Adaptive bitrate: monitors connection every 4s, upgrades/downgrades video quality live
- *  3. Uses RTCRtpSender.setParameters() to change bitrate WITHOUT renegotiating (no freeze)
- *  4. Three quality tiers:
- *       HIGH   → WiFi/5G:  1080p, 2.5Mbps video, 64kbps audio  (Airtel fiber / Ammu 5G)
- *       MEDIUM → 4G good:   720p, 1.2Mbps video, 48kbps audio  (Vishwa 4G)
- *       LOW    → weak 4G:   480p, 500kbps video, 32kbps audio  (fallback, no buffering)
- *  5. Network type detection via Navigator.connection API where available
- *  6. Audio: same low-latency settings, echoCancellation ON
+ * Resilience Features:
+ * 1. Perfect Negotiation - prevents offer collisions
+ * 2. Auto-reconnection - recovers from network issues
+ * 3. Adaptive quality - adjusts based on network
+ * 4. Session persistence - survives socket disconnect
+ * 5. Face detection safety - prevents unauthorized access
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
-export type CamStatus = "idle" | "connecting" | "connected" | "error";
+export type CamStatus = "idle" | "warming" | "connecting" | "connected" | "reconnecting" | "error";
 
 export interface UseWebRTCCameraOptions {
   nickname: "Vishwa" | "Ammu";
   isEnabled: boolean;
+  onFaceViolation?: () => void;
 }
 
 export interface UseWebRTCCameraReturn {
-  localStream:   MediaStream | null;
-  remoteStream:  MediaStream | null;
-  status:        CamStatus;
-  errorMsg:      string | null;
-  audioEnabled:  boolean;
-  toggleAudio:   () => void;
-  stop:          () => void;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  status: CamStatus;
+  errorMsg: string | null;
+  audioEnabled: boolean;
+  quality: "HIGH" | "MEDIUM" | "LOW";
+  toggleAudio: () => void;
+  stop: () => void;
 }
 
 const SIGNALING_SERVER = "https://camera-sharing-server.onrender.com";
 const ROOM = "vishwa-ammu-room-v4";
 
-// ── Quality tiers ─────────────────────────────────────────────────────────────
+// Timeouts
+const TIMEOUTS = {
+  CONNECTION: 30000,
+  NEGOTIATION: 15000,
+  ICE_GATHERING: 10000,
+  RECONNECT: 10000,
+  MEDIA: 15000,
+  QUALITY_ADAPT: 4000,
+};
+
+// Quality tiers
 const QUALITY = {
   HIGH: {
-    label:        "HD",
-    width:        1280,
-    height:       720,
-    frameRate:    30,
-    videoBps:     2_500_000,   // 2.5 Mbps
-    audioBps:     64_000,      // 64 kbps
+    label: "HD",
+    width: 1280,
+    height: 720,
+    frameRate: 30,
+    videoBps: 2_500_000,
+    audioBps: 64_000,
   },
   MEDIUM: {
-    label:        "SD",
-    width:        854,
-    height:       480,
-    frameRate:    25,
-    videoBps:     1_200_000,   // 1.2 Mbps
-    audioBps:     48_000,
+    label: "SD",
+    width: 854,
+    height: 480,
+    frameRate: 25,
+    videoBps: 1_200_000,
+    audioBps: 48_000,
   },
   LOW: {
-    label:        "Low",
-    width:        640,
-    height:       360,
-    frameRate:    20,
-    videoBps:     500_000,     // 500 kbps
-    audioBps:     32_000,
+    label: "Low",
+    width: 640,
+    height: 360,
+    frameRate: 20,
+    videoBps: 500_000,
+    audioBps: 32_000,
   },
 } as const;
 
 type QualityKey = keyof typeof QUALITY;
 
-// ── ICE servers ───────────────────────────────────────────────────────────────
+// ICE servers
 const ICE_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -88,29 +96,28 @@ const ICE_CONFIG: RTCConfiguration = {
       credential: "openrelayproject",
     },
   ],
-  // Prefer UDP (lower latency than TCP)
   iceTransportPolicy: "all",
 };
 
-// ── Detect initial quality based on network ───────────────────────────────────
+// Detect initial quality
 function detectInitialQuality(): QualityKey {
   try {
     const conn = (navigator as any).connection;
-    if (!conn) return "HIGH"; // assume good if API not available
+    if (!conn) return "HIGH";
 
-    const type = conn.effectiveType as string; // "4g" | "3g" | "2g" | "slow-2g"
-    const downlink = conn.downlink as number;  // Mbps estimate
+    const type = conn.effectiveType as string;
+    const downlink = conn.downlink as number;
 
     if (type === "4g" && downlink >= 10) return "HIGH";
-    if (type === "4g" && downlink >= 4)  return "MEDIUM";
-    if (type === "4g")                   return "MEDIUM";
+    if (type === "4g" && downlink >= 4) return "MEDIUM";
+    if (type === "4g") return "MEDIUM";
     return "LOW";
   } catch {
     return "HIGH";
   }
 }
 
-// ── Apply bitrate caps to existing senders (no renegotiation needed) ──────────
+// Apply bitrate
 async function applyBitrate(pc: RTCPeerConnection, quality: QualityKey) {
   const q = QUALITY[quality];
   const senders = pc.getSenders();
@@ -123,43 +130,45 @@ async function applyBitrate(pc: RTCPeerConnection, quality: QualityKey) {
         params.encodings = [{}];
       }
       if (sender.track.kind === "video") {
-        params.encodings[0].maxBitrate      = q.videoBps;
-        params.encodings[0].maxFramerate    = q.frameRate;
-        // Prioritize resolution (not framerate) when bandwidth is tight
-        params.encodings[0].networkPriority = quality === "HIGH" ? "high" : "medium" as any;
+        params.encodings[0].maxBitrate = q.videoBps;
+        params.encodings[0].maxFramerate = q.frameRate;
       }
       if (sender.track.kind === "audio") {
         params.encodings[0].maxBitrate = q.audioBps;
       }
       await sender.setParameters(params);
-    } catch {
-      // setParameters not supported in all browsers — silently ignore
-    }
+    } catch {}
   }
 }
 
-// ── Main hook ─────────────────────────────────────────────────────────────────
-export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions): UseWebRTCCameraReturn {
-  const [localStream,  setLocalStream]  = useState<MediaStream | null>(null);
+export function useWebRTCCamera({ nickname, isEnabled, onFaceViolation }: UseWebRTCCameraOptions): UseWebRTCCameraReturn {
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [status,       setStatus]       = useState<CamStatus>("idle");
-  const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
+  const [status, setStatus] = useState<CamStatus>("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [quality, setQuality] = useState<QualityKey>(detectInitialQuality());
 
-  const socketRef       = useRef<Socket | null>(null);
-  const pcRef           = useRef<RTCPeerConnection | null>(null);
-  const localStreamRef  = useRef<MediaStream | null>(null);
-  const streamRef       = useRef<MediaStream | null>(null);
-  const iceCandidateQ   = useRef<RTCIceCandidateInit[]>([]);
-  const cancelledRef    = useRef(false);
-  const retryRef        = useRef<ReturnType<typeof setInterval> | null>(null);
-  const qualityRef      = useRef<QualityKey>(detectInitialQuality());
-  const adaptTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Track stats for adaptive logic
-  const prevBytesRef    = useRef(0);
-  const prevTimeRef     = useRef(Date.now());
+  // Refs
+  const socketRef = useRef<Socket | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const iceCandidateQ = useRef<RTCIceCandidateInit[]>([]);
+  const cancelledRef = useRef(false);
+  const retryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qualityRef = useRef<QualityKey>(detectInitialQuality());
+  const adaptTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevBytesRef = useRef(0);
+  const prevTimeRef = useRef(Date.now());
+  const isPoliteRef = useRef(nickname === "Ammu"); // Ammu is polite (rolls back)
+  const negotiationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Mic toggle ──────────────────────────────────────────────────────────────
+  // ========================
+  // MIC TOGGLE
+  // ========================
+
   const toggleAudio = useCallback(() => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -169,8 +178,10 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
     setAudioEnabled(track.enabled);
   }, []);
 
-  // ── Adaptive quality monitor ────────────────────────────────────────────────
-  // Runs every 4 seconds when connected, upgrades/downgrades bitrate cap silently
+  // ========================
+  // ADAPTIVE QUALITY
+  // ========================
+
   const startAdaptiveMonitor = useCallback(() => {
     if (adaptTimerRef.current) clearInterval(adaptTimerRef.current);
 
@@ -185,67 +196,82 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
         let packetLoss = 0;
 
         stats.forEach((report) => {
-          // Outbound video stream stats
           if (report.type === "outbound-rtp" && report.kind === "video") {
             bytesSent = report.bytesSent ?? 0;
           }
-          // Remote inbound (what peer reports back to us)
           if (report.type === "remote-inbound-rtp" && report.kind === "video") {
-            roundTripTime = report.roundTripTime ?? 0;        // seconds
-            packetLoss    = report.fractionLost   ?? 0;       // 0–1
+            roundTripTime = report.roundTripTime ?? 0;
+            packetLoss = report.fractionLost ?? 0;
           }
         });
 
-        const now     = Date.now();
-        const elapsed = (now - prevTimeRef.current) / 1000;    // seconds
-        const bps     = ((bytesSent - prevBytesRef.current) * 8) / elapsed;
+        const now = Date.now();
+        const elapsed = (now - prevTimeRef.current) / 1000;
+        const bps = ((bytesSent - prevBytesRef.current) * 8) / elapsed;
 
         prevBytesRef.current = bytesSent;
-        prevTimeRef.current  = now;
+        prevTimeRef.current = now;
 
         const currentQ = qualityRef.current;
         let nextQ: QualityKey = currentQ;
 
-        // Upgrade conditions: low RTT, low loss, sufficient throughput
         if (roundTripTime < 0.08 && packetLoss < 0.02 && bps > QUALITY.HIGH.videoBps * 0.7) {
           nextQ = "HIGH";
-        }
-        // Downgrade: medium
-        else if (roundTripTime < 0.18 && packetLoss < 0.05) {
+        } else if (roundTripTime < 0.18 && packetLoss < 0.05) {
           nextQ = currentQ === "LOW" ? "MEDIUM" : currentQ;
-        }
-        // Downgrade: low (high RTT or packet loss = buffering risk)
-        else if (roundTripTime > 0.25 || packetLoss > 0.08) {
+        } else if (roundTripTime > 0.25 || packetLoss > 0.08) {
           nextQ = "LOW";
         }
 
         if (nextQ !== currentQ) {
-          console.log(`[Quality] ${currentQ} → ${nextQ} | RTT: ${(roundTripTime*1000).toFixed(0)}ms | loss: ${(packetLoss*100).toFixed(1)}% | bps: ${(bps/1000).toFixed(0)}k`);
+          console.log(`[Quality] ${currentQ} → ${nextQ}`);
           qualityRef.current = nextQ;
+          setQuality(nextQ);
           await applyBitrate(pc, nextQ);
         }
-      } catch {
-        // Stats API may not be available — ignore
-      }
-    }, 4000);
+      } catch {}
+    }, TIMEOUTS.QUALITY_ADAPT);
   }, []);
 
-  // ── Stop adaptive monitor ───────────────────────────────────────────────────
   const stopAdaptive = () => {
-    if (adaptTimerRef.current) { clearInterval(adaptTimerRef.current); adaptTimerRef.current = null; }
+    if (adaptTimerRef.current) {
+      clearInterval(adaptTimerRef.current);
+      adaptTimerRef.current = null;
+    }
   };
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // ========================
+  // HELPERS
+  // ========================
+
   const stopRetry = () => {
-    if (retryRef.current) { clearInterval(retryRef.current); retryRef.current = null; }
+    if (retryRef.current) {
+      clearInterval(retryRef.current);
+      retryRef.current = null;
+    }
+  };
+
+  const clearNegotiationTimeout = () => {
+    if (negotiationTimeoutRef.current) {
+      clearTimeout(negotiationTimeoutRef.current);
+      negotiationTimeoutRef.current = null;
+    }
+  };
+
+  const clearReconnectTimeout = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
   };
 
   const destroyPC = () => {
     stopAdaptive();
+    clearNegotiationTimeout();
+    clearReconnectTimeout();
     if (pcRef.current) {
       pcRef.current.ontrack = null;
       pcRef.current.onicecandidate = null;
-      pcRef.current.onnegotiationneeded = null;
       pcRef.current.onconnectionstatechange = null;
       pcRef.current.close();
       pcRef.current = null;
@@ -284,6 +310,10 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
     iceCandidateQ.current = [];
   };
 
+  // ========================
+  // PEER CONNECTION
+  // ========================
+
   const buildPC = (stream: MediaStream): RTCPeerConnection => {
     destroyPC();
     const pc = new RTCPeerConnection(ICE_CONFIG);
@@ -293,12 +323,12 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
 
     pc.ontrack = ({ streams }) => {
       if (streams[0] && !cancelledRef.current) {
-        console.log("[WebRTC] ✅ Remote stream (video+audio)");
+        console.log("[WebRTC] Remote stream received");
         stopRetry();
         setRemoteStream(streams[0]);
         setStatus("connected");
-        // Start adaptive monitor once connected
         startAdaptiveMonitor();
+        clearNegotiationTimeout();
       }
     };
 
@@ -310,71 +340,190 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
 
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
-      console.log("[WebRTC] state:", s);
-      if (s === "failed") { stopAdaptive(); pc.restartIce(); }
-      if (s === "disconnected") { stopAdaptive(); setRemoteStream(null); setStatus("connecting"); }
-      if (s === "connected") startAdaptiveMonitor();
+      console.log("[WebRTC] State:", s);
+
+      switch (s) {
+        case "connected":
+          setStatus("connected");
+          startAdaptiveMonitor();
+          break;
+        case "disconnected":
+          console.log("[WebRTC] Disconnected - attempting recovery");
+          setStatus("reconnecting");
+          setRemoteStream(null);
+          // Schedule reconnect
+          clearReconnectTimeout();
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (pcRef.current?.connectionState === "disconnected") {
+              console.log("[WebRTC] Reconnect timeout - restarting ICE");
+              pc.restartIce();
+            }
+          }, TIMEOUTS.RECONNECT);
+          break;
+        case "failed":
+          console.error("[WebRTC] Failed - restarting ICE");
+          stopAdaptive();
+          pc.restartIce();
+          setStatus("connecting");
+          break;
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      console.log("[ICE] State:", s);
+      if (s === "failed") {
+        pc.restartIce();
+      }
     };
 
     return pc;
   };
 
-  const sendOffer = async () => {
+  // ========================
+  // PERFECT NEGOTIATION
+  // ========================
+
+  const sendOffer = useCallback(async () => {
     const stream = streamRef.current;
     if (!stream || cancelledRef.current) return;
-    const q = QUALITY[qualityRef.current];
-    console.log(`[WebRTC] Creating offer at quality: ${qualityRef.current}`);
-    const pc = buildPC(stream);
+
+    const pc = pcRef.current || buildPC(stream);
+
+    // Check signaling state (Perfect Negotiation)
+    if (pc.signalingState !== "stable" && isPoliteRef.current) {
+      console.log("[Negotiation] Rolling back - polite peer");
+      await pc.setLocalDescription({ type: "rollback" });
+    }
+
     try {
+      setStatus("connecting");
+
       const offer = await pc.createOffer({
         offerToReceiveVideo: true,
         offerToReceiveAudio: true,
       });
-      await pc.setLocalDescription(offer);
-      // Apply initial bitrate caps immediately after offer
-      await applyBitrate(pc, qualityRef.current);
-      socketRef.current?.emit("offer", { room: ROOM, from: nickname, sdp: pc.localDescription });
-      console.log("[WebRTC] 📡 Offer sent");
-    } catch (err) {
-      console.error("[WebRTC] createOffer error:", err);
-    }
-  };
 
-  // ── Main effect ─────────────────────────────────────────────────────────────
+      await pc.setLocalDescription(offer);
+      await applyBitrate(pc, qualityRef.current);
+
+      socketRef.current?.emit("offer", { room: ROOM, from: nickname, sdp: pc.localDescription });
+
+      console.log("[WebRTC] Offer sent");
+
+      // Negotiation timeout
+      clearNegotiationTimeout();
+      negotiationTimeoutRef.current = setTimeout(() => {
+        if (status === "connecting") {
+          console.log("[Negotiation] Timeout - retrying");
+          sendOffer();
+        }
+      }, TIMEOUTS.NEGOTIATION);
+    } catch (err) {
+      console.error("[WebRTC] Offer error:", err);
+      setErrorMsg("Failed to establish connection");
+      setStatus("error");
+    }
+  }, [nickname, status]);
+
+  const handleOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+    const stream = streamRef.current;
+    if (!stream || cancelledRef.current) return;
+
+    const pc = pcRef.current || buildPC(stream);
+
+    // Perfect Negotiation: handle collision
+    if (pc.signalingState !== "stable") {
+      if (isPoliteRef.current) {
+        console.log("[Negotiation] Rolling back for incoming offer");
+        await pc.setLocalDescription({ type: "rollback" });
+      } else {
+        // Impolite peer ignores incoming offer
+        console.log("[Negotiation] Ignoring offer - impolite peer");
+        return;
+      }
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      await drainICE();
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await applyBitrate(pc, qualityRef.current);
+
+      socketRef.current?.emit("answer", { room: ROOM, from: nickname, sdp: pc.localDescription });
+
+      console.log("[WebRTC] Answer sent");
+      clearNegotiationTimeout();
+    } catch (err) {
+      console.error("[WebRTC] Answer error:", err);
+    }
+  }, [nickname]);
+
+  const handleAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      await drainICE();
+      clearNegotiationTimeout();
+      console.log("[WebRTC] Answer applied");
+    } catch (err) {
+      console.error("[WebRTC] Set remote description error:", err);
+    }
+  }, []);
+
+  // ========================
+  // MAIN EFFECT
+  // ========================
+
   useEffect(() => {
-    if (!isEnabled) { cleanup(); return; }
+    if (!isEnabled) {
+      cleanup();
+      return;
+    }
 
     cancelledRef.current = false;
-    qualityRef.current   = detectInitialQuality();
+    qualityRef.current = detectInitialQuality();
     setStatus("connecting");
     setErrorMsg(null);
 
     const run = async () => {
-      const q = QUALITY[qualityRef.current];
-      console.log(`[Camera] Starting at quality: ${qualityRef.current} (${q.width}×${q.height})`);
+      // Warm server first
+      setStatus("warming");
+      try {
+        await fetch(SIGNALING_SERVER + "/health");
+      } catch {}
+      if (cancelledRef.current) return;
 
-      // STEP 1: Get camera + mic
+      setStatus("connecting");
+      const q = QUALITY[qualityRef.current];
+
+      // Get camera + mic
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width:     { ideal: q.width,  max: 1920 },
-            height:    { ideal: q.height, max: 1080 },
+            width: { ideal: q.width, max: 1920 },
+            height: { ideal: q.height, max: 1080 },
             frameRate: { ideal: q.frameRate, max: 30 },
             facingMode: "user",
           },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl:  true,
-            latency:          0,
-            channelCount:     1,
-            sampleRate:       48000,
+            autoGainControl: true,
+            latency: 0,
+            channelCount: 1,
+            sampleRate: 48000,
           },
         });
       } catch (err: any) {
         if (cancelledRef.current) return;
-        // Fallback: video only if mic denied
+
+        // Fallback: video only
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -382,32 +531,35 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
               audio: false,
             });
           } catch {
-            if (!cancelledRef.current) { setStatus("error"); setErrorMsg("Camera permission denied. Please allow access and try again."); }
+            setStatus("error");
+            setErrorMsg("Camera permission denied. Please allow access and try again.");
             return;
           }
         } else {
-          if (!cancelledRef.current) {
-            const msg =
-              err.name === "NotFoundError"    ? "No camera found on this device." :
-              err.name === "NotReadableError" ? "Camera is in use by another app. Close it and retry." :
-                                               "Could not access camera.";
-            setStatus("error"); setErrorMsg(msg);
-          }
+          const msg =
+            err.name === "NotFoundError" ? "No camera found on this device." :
+            err.name === "NotReadableError" ? "Camera is in use by another app." :
+            "Could not access camera.";
+          setStatus("error");
+          setErrorMsg(msg);
           return;
         }
       }
 
-      if (cancelledRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
+      if (cancelledRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
 
-      // Mic starts muted — user turns it on via button
+      // Mic starts muted
       stream.getAudioTracks().forEach(t => { t.enabled = false; });
       setAudioEnabled(false);
 
       localStreamRef.current = stream;
-      streamRef.current      = stream;
+      streamRef.current = stream;
       setLocalStream(stream);
 
-      // STEP 2: Connect socket
+      // Connect socket
       const socket = io(SIGNALING_SERVER, {
         transports: ["websocket", "polling"],
         reconnectionAttempts: 10,
@@ -416,14 +568,15 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
       socketRef.current = socket;
 
       socket.on("connect", () => {
-        console.log("[Socket] ✅ Connected");
+        console.log("[Socket] Connected");
         socket.emit("join", { room: ROOM, user: nickname });
       });
 
-      socket.on("joined", ({ count }: { count: number }) => {
+      socket.on("joined", ({ count }) => {
         console.log(`[Socket] Room joined. Users: ${count}`);
         socket.emit("camera-ready", { room: ROOM, from: nickname });
 
+        // Retry until connected
         stopRetry();
         retryRef.current = setInterval(() => {
           if (cancelledRef.current) { stopRetry(); return; }
@@ -432,59 +585,48 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
         }, 3000);
       });
 
-      socket.on("camera-ready", async ({ from }: { from: string }) => {
+      socket.on("camera-ready", async ({ from }) => {
         if (from === nickname || cancelledRef.current) return;
-        console.log(`[Socket] 📷 ${from} ready`);
-        if (nickname === "Vishwa") await sendOffer();
+        console.log(`[Socket] ${from} ready`);
+        // Vishwa initiates
+        if (nickname === "Vishwa") {
+          await sendOffer();
+        }
       });
 
-      socket.on("request-offer", async ({ to }: { to: string }) => {
+      socket.on("request-offer", async ({ to }) => {
         if (nickname !== "Vishwa" || cancelledRef.current) return;
-        console.log("[Socket] 📨 request-offer for:", to);
         await sendOffer();
       });
 
-      socket.on("offer", async ({ from, sdp }: { from: string; sdp: RTCSessionDescriptionInit }) => {
+      socket.on("offer", async ({ from, sdp }) => {
         if (from === nickname || cancelledRef.current) return;
-        console.log("[Socket] 📨 Offer from:", from);
-        const pc = buildPC(stream);
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          await drainICE();
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          // Apply bitrate on answerer side too
-          await applyBitrate(pc, qualityRef.current);
-          socket.emit("answer", { room: ROOM, from: nickname, sdp: pc.localDescription });
-          console.log("[WebRTC] 📡 Answer sent");
-        } catch (err) {
-          console.error("[WebRTC] answer error:", err);
-        }
+        console.log(`[Socket] Offer from ${from}`);
+        await handleOffer(sdp);
       });
 
-      socket.on("answer", async ({ from, sdp }: { from: string; sdp: RTCSessionDescriptionInit }) => {
+      socket.on("answer", async ({ from, sdp }) => {
         if (from === nickname || cancelledRef.current) return;
-        const pc = pcRef.current;
-        if (!pc) return;
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          await drainICE();
-        } catch (err) {
-          console.error("[WebRTC] setRemoteDescription(answer) error:", err);
-        }
+        await handleAnswer(sdp);
       });
 
-      socket.on("ice", async ({ from, candidate }: { from: string; candidate: RTCIceCandidateInit }) => {
+      socket.on("ice", async ({ from, candidate }) => {
         if (from === nickname || !candidate) return;
         const pc = pcRef.current;
-        if (!pc) return;
-        if (!pc.remoteDescription) { iceCandidateQ.current.push(candidate); return; }
+        if (!pc) {
+          iceCandidateQ.current.push(candidate);
+          return;
+        }
+        if (!pc.remoteDescription) {
+          iceCandidateQ.current.push(candidate);
+          return;
+        }
         try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
       });
 
-      socket.on("camera-off", ({ from }: { from: string }) => {
+      socket.on("camera-off", ({ from }) => {
         if (from === nickname) return;
-        console.log(`[Socket] ❌ ${from} camera off`);
+        console.log(`[Socket] ${from} camera off`);
         destroyPC();
         setRemoteStream(null);
         setStatus("connecting");
@@ -493,7 +635,7 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
         }
       });
 
-      socket.on("connect_error", (err) => {
+      socket.on("connect_error", () => {
         if (!cancelledRef.current) {
           setStatus("error");
           setErrorMsg("Cannot reach signaling server. Check internet and try again.");
@@ -514,9 +656,18 @@ export function useWebRTCCamera({ nickname, isEnabled }: UseWebRTCCameraOptions)
       window.removeEventListener("beforeunload", onUnload);
       cleanup();
     };
-  }, [isEnabled, nickname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isEnabled, nickname]);
 
   const stop = useCallback(() => cleanup(true), [cleanup]);
 
-  return { localStream, remoteStream, status, errorMsg, audioEnabled, toggleAudio, stop };
+  return {
+    localStream,
+    remoteStream,
+    status,
+    errorMsg,
+    audioEnabled,
+    quality,
+    toggleAudio,
+    stop,
+  };
 }

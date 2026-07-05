@@ -1,17 +1,21 @@
 /**
- * VoiceCallScreen.tsx — v3
+ * VoiceCallScreen.tsx — v4 (Production-Grade with Recovery States)
  *
- * callStatus "calling"    → small floating bar at top only (caller sees chat still)
- * callStatus "incoming"   → full white screen: Accept + Reject
- * callStatus "connecting" → full white screen: spinner "Connecting..."
- * callStatus "connected"  → full white screen: Mic + End + Speaker + timer
- * callStatus "busy"       → full white screen: offline message
- * callStatus "ended"      → full white screen: "Call Ended"
- * isNearEar = true        → pure black screen, nothing pressable
+ * callStatus "calling"      → small floating bar at top (caller sees chat)
+ * callStatus "incoming"     → full white screen: Accept + Reject
+ * callStatus "connecting"  → full white screen: spinner "Connecting..."
+ * callStatus "negotiating"  → full white screen: spinner "Establishing secure connection..."
+ * callStatus "connected"    → full white screen: Mic + End + Speaker + timer
+ * callStatus "reconnecting" → full white screen: "Reconnecting..."
+ * callStatus "recovering"   → full white screen: "Recovering connection..."
+ * callStatus "failed"       → full white screen: "Connection failed"
+ * callStatus "busy"         → full white screen: offline message
+ * callStatus "ended"        → full white screen: "Call Ended"
+ * isNearEar = true          → pure black screen, nothing pressable
  */
 
 import React from "react";
-import { Mic, MicOff, Volume2, VolumeX, PhoneOff, Phone, Loader2 } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX, PhoneOff, Phone, Loader2, WifiOff, RefreshCw } from "lucide-react";
 import type { CallStatus } from "../hooks/useVoiceCall";
 
 interface VoiceCallScreenProps {
@@ -91,6 +95,30 @@ function Duration({ seconds }: { seconds: number }) {
   return <span style={{ fontSize: 20, color: "#6b7280", fontWeight: 500, letterSpacing: 3 }}>{m}:{s}</span>;
 }
 
+// ── Spinner with text ───────────────────────────────────────────────────────────
+function LoadingState({ name, message, color = "#10b981" }: { name: string; message: string; color?: string }) {
+  return (
+    <div style={FULL}>
+      <div style={CENTER}>
+        <div style={{
+          width: 96, height: 96, borderRadius: "50%",
+          background: `linear-gradient(135deg, ${color}, ${color}aa)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 38, fontWeight: 800, color: "#fff",
+        }}>
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <h2 style={{ ...NAME, marginTop: 20 }}>{name}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <Loader2 size={18} color={color} style={{ animation: "spin 1s linear infinite" }} />
+          <p style={{ ...SUB, margin: 0 }}>{message}</p>
+        </div>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function VoiceCallScreen({
   callStatus, callerName, nickname,
@@ -101,8 +129,7 @@ export default function VoiceCallScreen({
   const other       = nickname === "Vishwa" ? "Ammu" : "Vishwa";
   const displayName = callerName ?? other;
 
-  // ── "calling" = small top bar only — caller still sees the chat ───────────────
-  // This is the KEY fix: caller does NOT get full white screen
+  // ── "calling" = small top bar only ────────────────────────────────────────────
   if (callStatus === "calling") {
     return (
       <div style={{
@@ -114,7 +141,6 @@ export default function VoiceCallScreen({
         boxShadow: "0 2px 16px rgba(16,185,129,0.4)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Animated calling dots */}
           <div style={{ display: "flex", gap: 4 }}>
             {[0, 1, 2].map(i => (
               <span key={i} style={{
@@ -128,7 +154,6 @@ export default function VoiceCallScreen({
             Calling {displayName}…
           </span>
         </div>
-        {/* Cancel button */}
         <button onClick={onEnd} style={{
           background: "rgba(255,255,255,0.2)", border: "none",
           borderRadius: 20, padding: "6px 16px", color: "#fff",
@@ -147,7 +172,8 @@ export default function VoiceCallScreen({
   }
 
   // ── Proximity sensor: pure black ───────────────────────────────────────────────
-  if (isNearEar && (callStatus === "connected" || callStatus === "connecting")) {
+  const hideForProximity = ["connected", "connecting", "reconnecting", "recovering"].includes(callStatus);
+  if (isNearEar && hideForProximity) {
     return <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#000" }} />;
   }
 
@@ -172,14 +198,24 @@ export default function VoiceCallScreen({
     );
   }
 
-  // ── Connecting (WebRTC negotiating after accept) ───────────────────────────────
+  // ── Connecting ───────────────────────────────────────────────────────────────┐
   if (callStatus === "connecting") {
+    return <LoadingState name={displayName} message="Connecting…" />;
+  }
+
+  // ── Negotiating ──────────────────────────────────────────────────────────────
+  if (callStatus === "negotiating") {
+    return <LoadingState name={displayName} message="Establishing secure connection…" />;
+  }
+
+  // ── Reconnecting ─────────────────────────────────────────────────────────────
+  if (callStatus === "reconnecting") {
     return (
       <div style={FULL}>
         <div style={CENTER}>
           <div style={{
             width: 96, height: 96, borderRadius: "50%",
-            background: "linear-gradient(135deg,#10b981,#059669)",
+            background: "linear-gradient(135deg, #f59e0b, #d97706)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 38, fontWeight: 800, color: "#fff",
           }}>
@@ -187,9 +223,10 @@ export default function VoiceCallScreen({
           </div>
           <h2 style={{ ...NAME, marginTop: 20 }}>{displayName}</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <Loader2 size={18} color="#10b981" style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ ...SUB, margin: 0 }}>Connecting…</p>
+            <RefreshCw size={18} color="#f59e0b" style={{ animation: "spin 1s linear infinite" }} />
+            <p style={{ ...SUB, margin: 0, color: "#f59e0b" }}>Reconnecting…</p>
           </div>
+          <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 8 }}>Please wait while we restore your connection</p>
         </div>
         <div style={BOTTOM}>
           <RoundBtn onClick={onEnd} bg="#ef4444" size={64} label="End">
@@ -197,6 +234,35 @@ export default function VoiceCallScreen({
           </RoundBtn>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Recovering (session recovery after socket disconnect) ─────────────────────┐
+  if (callStatus === "recovering") {
+    return <LoadingState name={displayName} message="Recovering connection…" color="#3b82f6" />;
+  }
+
+  // ── Failed ───────────────────────────────────────────────────────────────────
+  if (callStatus === "failed") {
+    return (
+      <div style={FULL}>
+        <div style={CENTER}>
+          <div style={{
+            width: 96, height: 96, borderRadius: "50%",
+            background: "#fef2f2",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <WifiOff size={38} color="#ef4444" />
+          </div>
+          <h2 style={{ ...NAME, marginTop: 20, color: "#ef4444" }}>Connection Failed</h2>
+          <p style={{ fontSize: 14, color: "#6b7280", marginTop: 8 }}>Network issue detected. Please try again.</p>
+        </div>
+        <div style={BOTTOM}>
+          <RoundBtn onClick={onEnd} bg="#ef4444" size={64} label="Close">
+            <PhoneOff size={24} color="#fff" />
+          </RoundBtn>
+        </div>
       </div>
     );
   }
