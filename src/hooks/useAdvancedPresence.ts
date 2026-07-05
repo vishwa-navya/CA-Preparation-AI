@@ -23,9 +23,9 @@ interface UseAdvancedPresenceProps {
 // 🔥 Rules for reliable notification:
 // We consider other user ONLINE only if:
 // - isOnline = true,
-// - AND lastActivity < 40 seconds old.
+// - AND lastActivity < 8 seconds old (reduced for faster offline detection).
 // In ALL other cases → treat as OFFLINE.
-const ONLINE_WINDOW_MS = 40 * 1000;
+const ONLINE_WINDOW_MS = 8 * 1000;
 
 export function useAdvancedPresence({ userId, otherUserId }: UseAdvancedPresenceProps) {
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
@@ -61,8 +61,8 @@ export function useAdvancedPresence({ userId, otherUserId }: UseAdvancedPresence
     async (isOnline: boolean, force = false) => {
       const now = Date.now();
 
-      // Reduce write operations to Firestore
-      if (!force && now - lastPresenceUpdate.current < 5000 && isCurrentlyOnline.current === isOnline) {
+      // Reduce write operations to Firestore (write at most every 3 seconds)
+      if (!force && now - lastPresenceUpdate.current < 3000 && isCurrentlyOnline.current === isOnline) {
         return;
       }
 
@@ -111,13 +111,13 @@ export function useAdvancedPresence({ userId, otherUserId }: UseAdvancedPresence
     updatePresence(false, true);
   }, [updatePresence]);
 
-  // ---------- HEARTBEAT (Every 30 sec to maintain online) ----------
+  // ---------- HEARTBEAT (Every 5 sec to maintain online - faster detection) ----------
   const startHeartbeat = useCallback(() => {
     if (heartbeatInterval.current) clearInterval(heartbeatInterval.current);
 
     heartbeatInterval.current = setInterval(() => {
       if (isPageVisible.current) updatePresence(true);
-    }, 30000);
+    }, 5000);
   }, [updatePresence]);
 
   const stopHeartbeat = useCallback(() => {
@@ -159,35 +159,54 @@ export function useAdvancedPresence({ userId, otherUserId }: UseAdvancedPresence
     return () => window.removeEventListener('focus', handleFocus);
   }, [setOnline, startHeartbeat]);
 
-  // ---------- UNLOAD ----------
+  // ---------- UNLOAD (IMMEDIATE OFFLINE SIGNAL) ----------
   useEffect(() => {
     const handleUnload = () => {
-      if (navigator.sendBeacon && hasBeenOnline.current) {
+      // Immediate synchronous Firestore update before page closes
+      // Using setDoc with merge to update immediately
+      if (hasBeenOnline.current) {
+        // Use fetch with keepalive for reliable delivery
         const presenceData = {
           isOnline: false,
           lastSeen: new Date().toISOString(),
           lastActivity: new Date().toISOString(),
-          deviceInfo: getDeviceInfo()
+          deviceInfo: getDeviceInfo(),
+          _pendingWriteId: Date.now() + Math.random()
         };
 
-        const blob = new Blob([JSON.stringify(presenceData)], {
-          type: 'application/json'
-        });
+        // Primary: sendBeacon (most reliable for page close)
+        if (navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify(presenceData)], {
+            type: 'application/json'
+          });
+          navigator.sendBeacon(`/api/presence/${userId}`, blob);
+        }
 
-        navigator.sendBeacon(`/api/presence/${userId}`, blob);
+        // Fallback: Direct Firestore write (async, may not complete)
+        setDoc(
+          doc(lastSeenDb, 'presence', userId),
+          {
+            isOnline: false,
+            lastSeen: new Date().toISOString(),
+            lastActivity: new Date().toISOString(),
+            offlineAt: serverTimestamp()
+          },
+          { merge: true }
+        ).catch(() => {});
       }
-
-      setOffline();
     };
 
+    // Use both events for maximum reliability
     window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
     window.addEventListener('unload', handleUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
       window.removeEventListener('unload', handleUnload);
     };
-  }, [setOffline, userId, getDeviceInfo]);
+  }, [userId, getDeviceInfo]);
 
   // ---------- NETWORK ----------
   useEffect(() => {

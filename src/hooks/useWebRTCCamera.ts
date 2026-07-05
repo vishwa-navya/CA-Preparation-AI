@@ -346,17 +346,22 @@ export function useWebRTCCamera({ nickname, isEnabled, onFaceViolation }: UseWeb
         case "connected":
           setStatus("connected");
           startAdaptiveMonitor();
+          clearReconnectTimeout();
           break;
         case "disconnected":
           console.log("[WebRTC] Disconnected - attempting recovery");
           setStatus("reconnecting");
           setRemoteStream(null);
-          // Schedule reconnect
+          // Schedule reconnect - also re-emit camera-ready to trigger renegotiation
           clearReconnectTimeout();
           reconnectTimeoutRef.current = setTimeout(() => {
             if (pcRef.current?.connectionState === "disconnected") {
-              console.log("[WebRTC] Reconnect timeout - restarting ICE");
+              console.log("[WebRTC] Reconnect timeout - restarting ICE and re-signaling");
               pc.restartIce();
+              // Re-emit camera-ready to trigger fresh negotiation
+              if (socketRef.current?.connected && !cancelledRef.current) {
+                socketRef.current.emit("camera-ready", { room: ROOM, from: nickname });
+              }
             }
           }, TIMEOUTS.RECONNECT);
           break;
@@ -365,6 +370,10 @@ export function useWebRTCCamera({ nickname, isEnabled, onFaceViolation }: UseWeb
           stopAdaptive();
           pc.restartIce();
           setStatus("connecting");
+          // Also re-emit ready to trigger fresh negotiation
+          if (socketRef.current?.connected && !cancelledRef.current) {
+            socketRef.current.emit("camera-ready", { room: ROOM, from: nickname });
+          }
           break;
       }
     };
@@ -572,6 +581,14 @@ export function useWebRTCCamera({ nickname, isEnabled, onFaceViolation }: UseWeb
         socket.emit("join", { room: ROOM, user: nickname });
       });
 
+      // Handle socket reconnection - re-join room and re-emit ready
+      socket.io.on("reconnect", (attempt) => {
+        console.log(`[Socket] Reconnected after ${attempt} attempts`);
+        if (!cancelledRef.current) {
+          socket.emit("join", { room: ROOM, user: nickname });
+        }
+      });
+
       socket.on("joined", ({ count }) => {
         console.log(`[Socket] Room joined. Users: ${count}`);
         socket.emit("camera-ready", { room: ROOM, from: nickname });
@@ -587,15 +604,17 @@ export function useWebRTCCamera({ nickname, isEnabled, onFaceViolation }: UseWeb
 
       socket.on("camera-ready", async ({ from }) => {
         if (from === nickname || cancelledRef.current) return;
-        console.log(`[Socket] ${from} ready`);
-        // Vishwa initiates
-        if (nickname === "Vishwa") {
-          await sendOffer();
-        }
+        console.log(`[Socket] ${from} ready - both peers can now negotiate`);
+
+        // SYMMETRIC RECONNECTION: Both users attempt to create offer
+        // Perfect Negotiation handles collision via polite peer rollback
+        // This ensures reconnection works regardless of WHO reconnects
+        await sendOffer();
       });
 
       socket.on("request-offer", async ({ to }) => {
-        if (nickname !== "Vishwa" || cancelledRef.current) return;
+        // Anyone can respond to request-offer now (not just Vishwa)
+        if (cancelledRef.current) return;
         await sendOffer();
       });
 
