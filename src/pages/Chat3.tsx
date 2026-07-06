@@ -6,7 +6,7 @@ import MoodDisplay from '../components/MoodDisplay';
 import ReplyToMoodPill from '../components/ReplyToMoodPill';
 import { useChat } from '../hooks/useChat';
 import { useMood } from '../hooks/useMood';
-import { useOptimizedTyping } from '../hooks/useOptimizedTyping';
+import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTyping';
 import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
 import KissEmojiRain from '../components/KissEmojiRain';
 import RobotCloudChat3 from '../components/RobotCloudChat3';
@@ -61,7 +61,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showKissRain, setShowKissRain] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
   const [currentChat, setCurrentChat] = useState('chat3');
   const [selfTyping, setSelfTyping] = useState(false);
   const [useBlackText, setUseBlackText] = useState(false);
@@ -107,6 +106,10 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
   useOptimizedActivity(nickname);
   const otherUserActive = useOtherUserActivity(nickname === 'Vishwa' ? 'Ammu' : 'Vishwa');
+
+  // 🔥 TYPING LISTENER via Socket.IO (instant, zero Firebase cost)
+  const otherUser = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
+  const isOtherUserTyping = useTypingListener(otherUser as 'Vishwa' | 'Ammu');
 
   useEffect(() => {
     const setChatContext = async () => {
@@ -156,7 +159,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
     isEnabled: true
   });
 
-  const otherUser = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
   const { otherUserLastSeen, isOtherUserOnline, connectionStatus } = useLastSeen({
     userId: nickname,
     otherUserId: otherUser
@@ -204,51 +206,8 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
     return () => container.removeEventListener('scroll', handleScroll);
   }, [msgs.length]);
 
-  useEffect(() => {
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    const setupTypingListener = () => {
-      const unsubscribe = onSnapshot(
-        doc(lastSeenDb, 'typing', otherUser),
-        (docSnap) => {
-          retryCount = 0;
-          if (!docSnap.exists()) {
-            setIsTyping(false);
-            return;
-          }
-
-          const data = docSnap.data();
-          const isTypingRemote = data.isTyping;
-          const timestamp = data.timestamp?.toDate?.() ?? new Date();
-          const now = new Date();
-
-          const isStillTyping = isTypingRemote && now.getTime() - timestamp.getTime() < 3000;
-          setIsTyping(isStillTyping);
-        },
-        (error) => {
-          console.error('Error listening to typing status:', error);
-          setIsTyping(false);
-
-          if (retryCount < maxRetries) {
-            retryCount++;
-            const retryDelay = Math.pow(2, retryCount) * 1000;
-            console.log(`🔄 Retrying typing listener in ${retryDelay}ms (attempt ${retryCount})`);
-            setTimeout(setupTypingListener, retryDelay);
-          }
-        }
-      );
-
-      return unsubscribe;
-    };
-
-    const unsubscribe = setupTypingListener();
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [otherUser]);
+  // NOTE: Typing listener now uses Socket.IO (useTypingListener above)
+  // Old Firestore-based listener removed for zero Firebase cost and instant delivery
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -1039,7 +998,7 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
               );
             })
           )}
-          {isTyping && (
+          {isOtherUserTyping && (
             <TypingIndicatorChat3 nickname={otherUser} currentUserNickname={nickname} />
           )}
           <div ref={messagesEndRef} />

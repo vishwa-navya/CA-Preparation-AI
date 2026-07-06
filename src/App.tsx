@@ -9,8 +9,39 @@ import { requestFCMToken, onForegroundMessage } from './firebase';
 import { useSafetyToggle } from './hooks/useSafetyToggle';
 import { resetCameraState } from './hooks/useCameraState';
 
+// Server URLs
+const SIGNALING_SERVER = 'https://camera-sharing-server.onrender.com';
+
 type Page = 'login' | 'chat1' | 'chat2' | 'chat3' | 'memory';
 type Nickname = 'Vishwa' | 'Ammu' | string;
+
+/**
+ * Wake up the signaling server (important for Render cold start)
+ * Called immediately when app loads
+ */
+async function wakeUpServer() {
+  try {
+    console.log('🌅 Warming up signaling server...');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(`${SIGNALING_SERVER}/wake`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wake: true, ts: Date.now() }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      console.log('✅ Signaling server is awake');
+    }
+  } catch (err: any) {
+    // Server might be waking up, that's okay
+    console.log('⚠️ Wake-up request sent (server may be starting)');
+  }
+}
 
 // Global error boundary to prevent white screen crashes
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error?: Error }> {
@@ -84,6 +115,14 @@ function App() {
       }
     };
     setupNotifications();
+  }, []);
+
+  // 🌅 WAKE UP SERVER on app load (critical for Render cold start)
+  useEffect(() => {
+    wakeUpServer();
+    // Also wake up periodically to prevent cold start during use
+    const wakeInterval = setInterval(wakeUpServer, 10 * 60 * 1000); // Every 10 minutes
+    return () => clearInterval(wakeInterval);
   }, []);
 
   // 📨 Handle Notification Click (returns to login)
