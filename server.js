@@ -188,6 +188,28 @@ function generateMessageId() {
   return `${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
+/**
+ * REAL-TIME PRESENCE: Broadcast user online/offline status
+ * Immediately notifies all relevant parties
+ */
+function broadcastPresence(user, isOnline) {
+  // Find the other user to notify (Vishwa <-> Ammu)
+  const knownUsers = ["Vishwa", "Ammu"];
+  const otherUser = knownUsers.find(u => u !== user);
+
+  if (otherUser) {
+    const otherSockets = getUserSockets(otherUser);
+    otherSockets.forEach(sid => {
+      io.to(sid).emit("presence-update", {
+        user,
+        isOnline,
+        timestamp: Date.now(),
+      });
+    });
+    console.log(`[Presence] ${user} is ${isOnline ? "ONLINE" : "OFFLINE"} → notified ${otherUser}`);
+  }
+}
+
 function dedupeMessage(msgId) {
   const now = Date.now();
   const exists = sessions.messageCache.has(msgId);
@@ -658,6 +680,30 @@ io.on("connection", (socket) => {
     });
 
     console.log(`📋 Registered: ${user} (${getUserSockets(user).length} device(s))`);
+
+    // REAL-TIME PRESENCE: Broadcast user online immediately
+    broadcastPresence(user, true);
+  });
+
+  // ========================
+  // REAL-TIME PRESENCE
+  // ========================
+
+  // Request current online status of a user
+  socket.on("presence-check", ({ targetUser }) => {
+    const isOnline = sessions.users.has(targetUser) && sessions.users.get(targetUser).size > 0;
+    socket.emit("presence-status", { user: targetUser, isOnline });
+  });
+
+  // Activity heartbeat for presence (every 2 seconds from client)
+  socket.on("presence-heartbeat", () => {
+    const user = socket.data.user;
+    if (user) {
+      const meta = sessions.sockets.get(socket.id);
+      if (meta) {
+        meta.lastActivity = Date.now();
+      }
+    }
   });
 
   // ========================
@@ -973,6 +1019,13 @@ io.on("connection", (socket) => {
 
     if (user) {
       removeUserSocket(user, socket.id);
+
+      // REAL-TIME PRESENCE: Check if this was the last socket for this user
+      const remainingSockets = getUserSockets(user);
+      if (remainingSockets.length === 0) {
+        // User is now OFFLINE - broadcast immediately
+        broadcastPresence(user, false);
+      }
 
       // Handle active call
       if (callId) {
