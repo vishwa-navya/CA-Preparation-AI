@@ -23,7 +23,11 @@ import {
 import { db } from "../firebase";
 import { lastSeenDb } from "../firebase-lastseen";
 
-const ONLINE_WINDOW_MS = 40_000;
+// Match the heartbeat interval used by useAdvancedPresence (every 3s heartbeat,
+// so 10s window gives 3 missed beats before we declare offline).
+const ONLINE_WINDOW_MS = 10_000;
+// How often we re-evaluate stale lastActivity without waiting for a new snapshot.
+const RECHECK_INTERVAL_MS = 3_000;
 
 export interface UnreadMessageInfo {
   id: string;
@@ -67,36 +71,56 @@ export function useMemoriesNotification(
   const countedRef = useRef<Set<string>>(new Set());
   // Track the latest message doc snapshot for re-evaluation
   const latestMsgRef = useRef<any>(null);
+  // Cache raw Firestore presence data for periodic re-evaluation
+  const presenceDataRef = useRef<any>(null);
 
-  // ── Presence: read-only listener on lastSeenDb ──────────────────────────
+  // ── Presence: read-only listener on lastSeenDb + periodic re-evaluation ──
   useEffect(() => {
+    const evaluatePresence = () => {
+      const data = presenceDataRef.current;
+      if (!data) {
+        setIsOtherOnline(false);
+        return;
+      }
+      try {
+        const lastActivity = data.lastActivity?.toDate
+          ? data.lastActivity.toDate()
+          : null;
+        const online = !!(
+          data.isOnline &&
+          lastActivity &&
+          Date.now() - lastActivity.getTime() <= ONLINE_WINDOW_MS
+        );
+        setIsOtherOnline(online);
+      } catch {
+        setIsOtherOnline(false);
+      }
+    };
+
     const unsub = onSnapshot(
       doc(lastSeenDb, "presence", otherUser),
       (snap) => {
         if (!snap.exists()) {
+          presenceDataRef.current = null;
           setIsOtherOnline(false);
           return;
         }
-        const data = snap.data();
-        try {
-          const lastActivity = data.lastActivity?.toDate
-            ? data.lastActivity.toDate()
-            : null;
-          const online = !!(
-            data.isOnline &&
-            lastActivity &&
-            Date.now() - lastActivity.getTime() <= ONLINE_WINDOW_MS
-          );
-          setIsOtherOnline(online);
-        } catch {
-          setIsOtherOnline(false);
-        }
+        presenceDataRef.current = snap.data();
+        evaluatePresence();
       },
       () => {
         /* presence is non-critical */
       }
     );
-    return unsub;
+
+    // Periodically re-evaluate so a stale lastActivity (user closed app without
+    // writing isOnline:false) flips the dot off without needing a new snapshot.
+    const interval = setInterval(evaluatePresence, RECHECK_INTERVAL_MS);
+
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, [otherUser]);
 
   // ── Unread message tracking via privateMessages ─────────────────────────
