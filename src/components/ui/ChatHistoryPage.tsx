@@ -1,11 +1,11 @@
 import React, { useState, useEffect, Component, ReactNode } from 'react';
 import { X, ChevronLeft, MessageCircle, Heart, AlertCircle } from 'lucide-react';
-import { collection, query, where, orderBy, getDocs, Timestamp, limit, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, Timestamp, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { lastSeenDb } from '../../firebase-lastseen';
-import PresenceIndicator from '../PresenceIndicator';
+import SmartNotification from '../SmartNotification';
 import RobotCloudChat3 from '../RobotCloudChat3';
 import VoiceMessageInline from '../VoiceMessageInline';
+import type { MemoriesNotificationState } from '../../hooks/useMemoriesNotification';
 
 class MessageErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -18,21 +18,9 @@ class MessageErrorBoundary extends Component<{ children: ReactNode }, { hasError
   }
 }
 
-const ONLINE_WINDOW_MS = 40_000;
-
-function formatLastSeenLocal(ts: any): string {
-  if (!ts) return '';
-  let date: Date;
-  try { date = ts.toDate ? ts.toDate() : new Date(ts); } catch { return ''; }
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (date >= today) {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  }
-  return `${date.getDate()} ${date.toLocaleDateString('en-US', { month: 'short' })} ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
-}
-
 interface ChatHistoryPageProps {
   nickname: 'Vishwa' | 'Ammu';
+  memoriesNotif: MemoriesNotificationState;
   onExit: () => void;
 }
 
@@ -85,7 +73,7 @@ function tsToDate(ts: any): Date | null {
   return null;
 }
 
-function ChatHistoryPage({ nickname, onExit }: ChatHistoryPageProps) {
+function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPageProps) {
   const [currentView, setCurrentView] = useState<ViewLevel>('months');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
@@ -97,27 +85,8 @@ function ChatHistoryPage({ nickname, onExit }: ChatHistoryPageProps) {
   const [initLoading, setInitLoading] = useState(true);
 
   // Read-only presence for the other user — no writing, no heartbeat, no conflict with Chat2
-  const otherUser = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
-  const [isOtherOnline, setIsOtherOnline] = useState(false);
-  const [otherLastSeen, setOtherLastSeen] = useState('');
 
-  useEffect(() => {
-    const unsub = onSnapshot(
-      doc(lastSeenDb, 'presence', otherUser),
-      (snap) => {
-        if (!snap.exists()) { setIsOtherOnline(false); setOtherLastSeen(''); return; }
-        const data = snap.data();
-        try {
-          const lastActivity = data.lastActivity?.toDate ? data.lastActivity.toDate() : null;
-          const online = !!(data.isOnline && lastActivity && Date.now() - lastActivity.getTime() <= ONLINE_WINDOW_MS);
-          setIsOtherOnline(online);
-          setOtherLastSeen(online ? '' : formatLastSeenLocal(data.lastSeen));
-        } catch { setIsOtherOnline(false); }
-      },
-      () => { /* ignore errors — presence is non-critical */ }
-    );
-    return unsub;
-  }, [otherUser]);
+
 
   // Ensure skip-logout flag is set on mount (the onClick already sets it,
   // but this is a belt-and-suspenders backup for the flag)
@@ -457,8 +426,8 @@ function ChatHistoryPage({ nickname, onExit }: ChatHistoryPageProps) {
 
       {/* Header */}
       <div className="relative z-10 bg-white/10 backdrop-blur-md px-4 py-4 border-b border-white/20 shadow-lg">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 flex-shrink-0">
             {currentView !== 'months' ? (
               <button
                 onClick={handleBack}
@@ -469,19 +438,24 @@ function ChatHistoryPage({ nickname, onExit }: ChatHistoryPageProps) {
             ) : (
               <Heart className="w-5 h-5 text-rose-400 fill-rose-400" />
             )}
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">{getHeaderTitle()}</h1>
-              <PresenceIndicator
-                isOnline={isOtherOnline}
-                lastSeen={otherLastSeen ? `last seen ${otherLastSeen}` : undefined}
-                connectionStatus={isOtherOnline ? 'online' : 'offline'}
-                className="text-white/80"
-              />
-            </div>
+            <h1 className="text-base font-bold text-white leading-tight">{getHeaderTitle()}</h1>
           </div>
+
+          {/* Smart Notification — replaces "last seen" text */}
+          <div className="flex-1 flex justify-end">
+            <SmartNotification
+              isOtherOnline={memoriesNotif.isOtherOnline}
+              unreadCount={memoriesNotif.unreadCount}
+              latestUnread={memoriesNotif.latestUnread}
+              otherUserDp={memoriesNotif.otherUserDp}
+              otherUserName={memoriesNotif.otherUserName}
+              theme="dark"
+            />
+          </div>
+
           <button
             onClick={onExit}
-            className="p-2 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors"
+            className="p-2 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

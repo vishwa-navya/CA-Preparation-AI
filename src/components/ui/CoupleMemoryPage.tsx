@@ -2,6 +2,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { Flame, Download, X, Play, Pause, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useCoupleMemory } from "../../hooks/useCoupleMemory";
+import { useMemoriesNotification } from "../../hooks/useMemoriesNotification";
+import SmartNotification from "../SmartNotification";
 import ChatHistoryPage from "./ChatHistoryPage";
 
 interface Props {
@@ -33,6 +35,16 @@ export default function CoupleMemoryPage({
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Smart Notification — mounted once at the Memories root so state
+  // persists across internal page navigations (Month/Date/Viewer/History)
+  const memoriesNotif = useMemoriesNotification(nickname ?? "Vishwa");
+
+  // Clear unread state when the user completely exits the Memories module
+  const handleExit = useCallback(() => {
+    memoriesNotif.clearUnread();
+    onExit();
+  }, [memoriesNotif, onExit]);
 
   const {
     hotMap,
@@ -192,7 +204,11 @@ export default function CoupleMemoryPage({
       }`}
     >
       {/* HEADER */}
-      <div className="flex justify-between items-center px-4 py-3 bg-white/30 backdrop-blur-md">
+      <div
+        className={`flex justify-between items-center px-4 bg-white/30 backdrop-blur-md ${
+          isMobile ? "py-4" : "py-3"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -205,10 +221,26 @@ export default function CoupleMemoryPage({
           >
             <MessageCircle className="w-5 h-5" />
           </button>
-          <div className="text-lg font-semibold text-white drop-shadow">
-            Our Memories
-          </div>
+          {/* Hide "Our Memories" text on mobile to save header space */}
+          {!isMobile && (
+            <div className="text-lg font-semibold text-white drop-shadow">
+              Our Memories
+            </div>
+          )}
         </div>
+
+        {/* Smart Notification — Dynamic Island style */}
+        <div className="flex-1 flex justify-center px-2">
+          <SmartNotification
+            isOtherOnline={memoriesNotif.isOtherOnline}
+            unreadCount={memoriesNotif.unreadCount}
+            latestUnread={memoriesNotif.latestUnread}
+            otherUserDp={memoriesNotif.otherUserDp}
+            otherUserName={memoriesNotif.otherUserName}
+            theme="light"
+          />
+        </div>
+
         <div className="flex gap-2">
           {onNavigateToChat1 && (
             <button
@@ -227,7 +259,7 @@ export default function CoupleMemoryPage({
             </button>
           )}
           <button
-            onClick={onExit}
+            onClick={handleExit}
             className="px-3 py-1 bg-white text-black rounded-full shadow text-sm"
           >
             Exit
@@ -446,6 +478,18 @@ export default function CoupleMemoryPage({
             className="max-h-full max-w-full object-contain"
           />
 
+          {/* Smart Notification in fullscreen viewer header */}
+          <div className="absolute top-0 left-0 right-0 flex justify-center items-center px-4 py-3 z-[101]">
+            <SmartNotification
+              isOtherOnline={memoriesNotif.isOtherOnline}
+              unreadCount={memoriesNotif.unreadCount}
+              latestUnread={memoriesNotif.latestUnread}
+              otherUserDp={memoriesNotif.otherUserDp}
+              otherUserName={memoriesNotif.otherUserName}
+              theme="dark"
+            />
+          </div>
+
           {/* Overlay buttons */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-6">
             {/* 🔥 Hot toggle */}
@@ -494,6 +538,7 @@ export default function CoupleMemoryPage({
       {showChatHistory && nickname && (
         <ChatHistoryPage
           nickname={nickname}
+          memoriesNotif={memoriesNotif}
           onExit={() => {
             setShowChatHistory(false);
             // Resume safety logout now that history is closed
