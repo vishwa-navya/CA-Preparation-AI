@@ -91,108 +91,123 @@ export default function SmartNotification({
     <div
       ref={containerRef}
       className="flex items-center justify-end"
-      style={{ minHeight: 40 }}
+      style={{ minHeight: 44 }}
     >
-      {/* Dynamic Island container */}
+      {/* Dynamic Island pill — 3D glass effect */}
       <motion.div
         layout
-        className="flex items-center gap-2 rounded-full overflow-hidden"
+        className="flex items-center rounded-full overflow-hidden"
         style={{
-          backgroundColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.85)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+          /* 3D layered shadow for depth */
+          background: isDark
+            ? "linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 100%)"
+            : "linear-gradient(145deg, #ffffff 0%, #f0f0f0 100%)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          /* top-left highlight + bottom-right depth shadow = 3D look */
+          boxShadow: isDark
+            ? "0 1px 0 0 rgba(255,255,255,0.3) inset, 0 -1px 0 0 rgba(0,0,0,0.2) inset, 0 6px 20px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.2)"
+            : "0 1px 0 0 rgba(255,255,255,0.9) inset, 0 -1px 0 0 rgba(0,0,0,0.08) inset, 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.1)",
           border: isDark
-            ? "1px solid rgba(255,255,255,0.2)"
-            : "1px solid rgba(255,255,255,0.5)",
-        }}
-        animate={{
-          width: hasUnread ? "auto" : 44,
-          height: 44,
-          borderRadius: 22,
+            ? "1px solid rgba(255,255,255,0.25)"
+            : "1px solid rgba(200,200,200,0.6)",
+          padding: hasUnread ? "4px 10px 4px 4px" : "4px",
+          gap: hasUnread ? 8 : 0,
         }}
         transition={{
           type: "spring",
-          stiffness: 400,
-          damping: 32,
-          mass: 0.8,
+          stiffness: 380,
+          damping: 30,
+          mass: 0.7,
         }}
       >
-        {/* DP — always visible, slides left when notification expands */}
-        <motion.div
-          layout
-          className="relative flex-shrink-0"
-          animate={{ marginLeft: hasUnread ? 4 : 0 }}
-          transition={{ type: "spring", stiffness: 400, damping: 32 }}
-        >
+        {/* DP — single, always visible */}
+        <motion.div layout className="relative flex-shrink-0">
           <img
             src={otherUserDp}
             alt={otherUserName}
-            className="w-9 h-9 rounded-full object-cover"
+            className="rounded-full object-cover"
             style={{
-              border: "2px solid rgba(255,255,255,0.6)",
+              width: 36,
+              height: 36,
+              border: isDark
+                ? "2px solid rgba(255,255,255,0.5)"
+                : "2px solid rgba(255,255,255,0.9)",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
             }}
           />
-          {/* Green online indicator */}
+          {/* Green online dot */}
           <AnimatePresence>
             {isOtherOnline && (
               <motion.div
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500"
+                transition={{ duration: 0.18 }}
                 style={{
+                  position: "absolute",
+                  bottom: 1,
+                  right: 1,
+                  width: 11,
+                  height: 11,
+                  borderRadius: "50%",
+                  background: "#22c55e",
                   border: "2px solid white",
-                  boxShadow: "0 0 4px rgba(34,197,94,0.6)",
+                  boxShadow: "0 0 5px rgba(34,197,94,0.7)",
                 }}
               />
             )}
           </AnimatePresence>
         </motion.div>
 
-        {/* Expandable notification content */}
+        {/* Expandable content — no second DP */}
         <AnimatePresence>
           {hasUnread && (
             <motion.div
-              key="notification-content"
+              key="notif-body"
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: "auto", opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{
                 type: "spring",
-                stiffness: 400,
-                damping: 32,
-                opacity: { duration: 0.2 },
+                stiffness: 380,
+                damping: 30,
+                opacity: { duration: 0.15 },
               }}
               className="flex items-center gap-2 overflow-hidden"
-              style={{ paddingRight: 6 }}
             >
-              {/* Sender mini DP */}
-              <img
-                src={otherUserDp}
-                alt=""
-                className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-              />
-
-              {/* Message preview — truncated */}
+              {/* Message preview */}
               <span
                 ref={textRef}
-                className={isDark ? "text-white text-xs font-medium whitespace-nowrap" : "text-gray-800 text-xs font-medium whitespace-nowrap"}
-                style={{ maxWidth: isMobile ? 160 : 240 }}
+                style={{
+                  maxWidth: isMobile ? 120 : 200,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  color: isDark ? "rgba(255,255,255,0.92)" : "#1f2937",
+                }}
               >
                 {truncatedText}
               </span>
 
               {/* Unread count badge */}
               <div
-                className="flex items-center justify-center rounded-full bg-red-500 text-white font-bold flex-shrink-0"
                 style={{
                   minWidth: 20,
                   height: 20,
-                  padding: "0 6px",
+                  borderRadius: 10,
+                  background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                  color: "#fff",
+                  fontWeight: 700,
                   fontSize: 11,
-                  boxShadow: "0 1px 4px rgba(239,68,68,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 5px",
+                  flexShrink: 0,
+                  boxShadow: "0 2px 6px rgba(239,68,68,0.5), 0 1px 0 rgba(255,255,255,0.2) inset",
                 }}
               >
                 {unreadCount > 99 ? "99+" : unreadCount}
