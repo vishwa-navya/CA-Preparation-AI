@@ -6,7 +6,8 @@ interface MessageSeenDotsProps {
   currentUserId: string;
   seenBy?: string[];
   timestamp?: string;
-  theme?: "chat2" | "chat3";     // ⭐ NEW: theme support
+  theme?: "chat2" | "chat3";
+  silentReadActive?: boolean;
 }
 
 interface Particle {
@@ -22,7 +23,8 @@ function MessageSeenDots({
   currentUserId,
   seenBy = [],
   timestamp,
-  theme = "chat2"                 // default = chat2
+  theme = "chat2",
+  silentReadActive = false
 }: MessageSeenDotsProps) {
 
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -78,6 +80,38 @@ function MessageSeenDots({
   return (
     <div className="flex items-center justify-end gap-1 mt-1 relative">
       <div className="flex gap-0.5 relative">
+        {/* SILENT READ RIPPLE — concentric expanding rings */}
+        {silentReadActive && (
+          <>
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple"
+              style={{
+                width: 4,
+                height: 4,
+                borderColor: isChat3 ? "rgba(79,162,255,0.6)" : "rgba(34,197,94,0.6)",
+                animationDelay: "0s",
+              }}
+            />
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple"
+              style={{
+                width: 4,
+                height: 4,
+                borderColor: isChat3 ? "rgba(79,162,255,0.6)" : "rgba(34,197,94,0.6)",
+                animationDelay: "0.8s",
+              }}
+            />
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple"
+              style={{
+                width: 4,
+                height: 4,
+                borderColor: isChat3 ? "rgba(79,162,255,0.6)" : "rgba(34,197,94,0.6)",
+                animationDelay: "1.6s",
+              }}
+            />
+          </>
+        )}
 
         {/* DOT 1 */}
         <div

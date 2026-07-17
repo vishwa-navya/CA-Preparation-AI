@@ -45,6 +45,9 @@ import { useWebRTCCamera } from '../hooks/useWebRTCCamera';
 import CameraShareOverlay from '../components/CameraShareOverlay';
 import { useVoiceCall } from '../hooks/useVoiceCall';
 import BookIconMenu from '../components/BookIconMenu';
+import LovePulse from '../components/LovePulse';
+import { useLovePulse } from '../hooks/useLovePulse';
+import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
 // ──────────────────────────────────────────────────────────────────────────────
 
 const BACKEND_URL = "https://notification2.onrender.com"; //// vishwanavyasree account 12/5/26
@@ -214,6 +217,18 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
   const { otherUserLastSeen, isOtherUserOnline, connectionStatus } = useLastSeen({
     userId: nickname,
     otherUserId: otherUser
+  });
+
+  // ── Premium: Love Pulse + Silent Read Signal ──
+  const lovePulseActive = useLovePulse({
+    isOtherUserOnline,
+    isOtherUserTyping,
+    hasMessages: msgs.length > 0,
+  });
+  const { silentReadActive, targetMessageId } = useSilentReadSignal({
+    messages: msgs,
+    nickname,
+    otherUser: otherUser as 'Vishwa' | 'Ammu',
   });
 
   // Pass the corrected chat active state to useMessageSeen
@@ -1074,12 +1089,14 @@ const processNotificationQueue = async () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
               {/* ── Book icon → popup menu with Camera + Voice Call options ── */}
-              <BookIconMenu
-                isCameraSharing={isCameraSharing}
-                isInCall={callStatus !== "idle"}
-                onStartCamera={handleStartCamera}
-                onStartCall={handleStartCall}
-              />
+              <LovePulse active={lovePulseActive} size={44}>
+                <BookIconMenu
+                  isCameraSharing={isCameraSharing}
+                  isInCall={callStatus !== "idle"}
+                  onStartCamera={handleStartCamera}
+                  onStartCall={handleStartCall}
+                />
+              </LovePulse>
 
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent truncate">
@@ -1239,6 +1256,7 @@ const processNotificationQueue = async () => {
                     replyTo={msg.replyTo}
                     msg={msg}
                     hasSpacing={hasSpacing}
+                    silentReadActive={silentReadActive && targetMessageId === msg.id}
                   />
                 );
               }
@@ -1265,6 +1283,7 @@ const processNotificationQueue = async () => {
                   replyTo={msg.replyTo}
                   msg={msg}
                   hasSpacing={hasSpacing}
+                  silentReadActive={silentReadActive && targetMessageId === msg.id}
                 />
               );
             })

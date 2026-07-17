@@ -10,6 +10,9 @@ import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTypi
 import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
 import KissEmojiRain from '../components/KissEmojiRain';
 import RobotCloudChat3 from '../components/RobotCloudChat3';
+import LovePulse from '../components/LovePulse';
+import { useLovePulse } from '../hooks/useLovePulse';
+import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
 import MoodReactor from '../components/MoodReactor';
 import { useMessageSeen } from '../hooks/useMessageSeen';
 import { useTabVisibility } from '../hooks/useTabVisibility';
@@ -162,6 +165,18 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   const { otherUserLastSeen, isOtherUserOnline, connectionStatus } = useLastSeen({
     userId: nickname,
     otherUserId: otherUser
+  });
+
+  // ── Premium: Love Pulse + Silent Read Signal ──
+  const lovePulseActive = useLovePulse({
+    isOtherUserOnline,
+    isOtherUserTyping,
+    hasMessages: msgs.length > 0,
+  });
+  const { silentReadActive, targetMessageId } = useSilentReadSignal({
+    messages: msgs,
+    nickname,
+    otherUser: otherUser as 'Vishwa' | 'Ammu',
   });
 
   useEffect(() => {
@@ -806,9 +821,11 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
               {isOtherUserOnline ? (
-                <span className="w-17 h-17 sm:w-8 sm:h-8 text-red-500">
-                  <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-white flex-shrink-0 fill-white" />
-                </span>
+                <LovePulse active={lovePulseActive} size={36}>
+                  <span className="w-17 h-17 sm:w-8 sm:h-8 text-red-500">
+                    <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-white flex-shrink-0 fill-white" />
+                  </span>
+                </LovePulse>
               ) : (
                 <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-white flex-shrink-0 fill-red" />
               )}
@@ -968,6 +985,7 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
                     replyTo={msg.replyTo}
                     msg={msg}
                     hasSpacing={hasSpacing}
+                    silentReadActive={silentReadActive && targetMessageId === msg.id}
                   />
                 );
               }
@@ -994,6 +1012,7 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
                   replyTo={msg.replyTo}
                   msg={msg}
                   hasSpacing={hasSpacing}
+                  silentReadActive={silentReadActive && targetMessageId === msg.id}
                 />
               );
             })

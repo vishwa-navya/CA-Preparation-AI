@@ -32,6 +32,7 @@ interface RobotCloudChat3Props {
   isLastInGroup?: boolean;
   isMiddleInGroup?: boolean;
   hasSpacing?: boolean; // NEW: spacing indicator
+  silentReadActive?: boolean;
 }
 
 function RobotCloudChat3({
@@ -57,7 +58,8 @@ function RobotCloudChat3({
   isFirstInGroup = false,
   isLastInGroup = false,
   isMiddleInGroup = false,
-  hasSpacing = false // NEW
+  hasSpacing = false, // NEW
+  silentReadActive = false
 }: RobotCloudChat3Props) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -249,7 +251,14 @@ function RobotCloudChat3({
 
             <div className="absolute bottom-1 right-2 flex items-center justify-end" style={{ gap: '2px' }}>
               {isOwn && (
-                <div className="flex" style={{ gap: '1px' }}>
+                <div className="flex relative" style={{ gap: '1px' }}>
+                  {silentReadActive && (
+                    <>
+                      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple" style={{ width: 4, height: 4, borderColor: 'rgba(79,162,255,0.6)', animationDelay: '0s' }} />
+                      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple" style={{ width: 4, height: 4, borderColor: 'rgba(79,162,255,0.6)', animationDelay: '0.8s' }} />
+                      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full silent-read-ripple" style={{ width: 4, height: 4, borderColor: 'rgba(79,162,255,0.6)', animationDelay: '1.6s' }} />
+                    </>
+                  )}
                   <div 
                     className={`w-1 h-1 rounded-full transition-colors duration-300 ${
                       msg?.seenBy?.includes(currentUserNickname === 'Vishwa' ? 'Ammu' : 'Vishwa') 

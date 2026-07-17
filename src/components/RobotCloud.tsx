@@ -34,6 +34,7 @@ interface RobotCloudProps {
   isLastInGroup?: boolean;
   isMiddleInGroup?: boolean;
   hasSpacing?: boolean;
+  silentReadActive?: boolean;
 }
 
 function RobotCloud({
@@ -59,7 +60,8 @@ function RobotCloud({
   isFirstInGroup = false,
   isLastInGroup = false,
   isMiddleInGroup = false,
-  hasSpacing = false
+  hasSpacing = false,
+  silentReadActive = false
 }: RobotCloudProps) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -428,6 +430,8 @@ function RobotCloud({
                   currentUserId={currentUserNickname || ''}
                   seenBy={msg?.seenBy || []}
                   timestamp={timestamp}
+                  theme="chat2"
+                  silentReadActive={silentReadActive}
                 />
               )}
               {timestamp && !isOwn && (
