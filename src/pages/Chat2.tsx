@@ -253,6 +253,8 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
       }
     };
   }, []);
+
+//// TV device exit method 
 useEffect(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
     // Only trigger if user is NOT typing in a text field
