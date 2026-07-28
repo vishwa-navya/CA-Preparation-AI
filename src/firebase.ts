@@ -15,13 +15,12 @@ import {
 // 1) Firebase project config (UPDATED)
 // ---------------------------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "AIzaSyAliH8x893VjW3hTuZZD_eX9uMh9h9mSCM",
-  authDomain: "lastseen-8800e.firebaseapp.com",
-  projectId: "lastseen-8800e",
-  storageBucket: "lastseen-8800e.firebasestorage.app",
-  messagingSenderId: "955054201089",
-  appId: "1:955054201089:web:798df37c21f4a56d4d2300",
-  measurementId: "G-HFGR9X891M",
+  apiKey: 'AIzaSyCJB10ot9q_6KpI_borDB987gZWuidX40I',
+  authDomain: 'vishwanavya-72a92.firebaseapp.com',
+  projectId: 'vishwanavya-72a92',
+  storageBucket: 'vishwanavya-72a92.appspot.com',
+  messagingSenderId: '34331683691',
+  appId: '1:34331683691:web:09cd70702c7f70dd83fa2e',
 };
 
 // ---------------------------------------------------------------------------
@@ -73,7 +72,9 @@ export { messaging };
 const swPromise: Promise<ServiceWorkerRegistration | null> = (async () => {
   // Skip Service Worker registration in StackBlitz environment
   if (isStackBlitzEnvironment()) {
-    console.log('⚠️ Service Worker skipped: Not supported in StackBlitz environment');
+    console.log(
+      '⚠️ Service Worker skipped: Not supported in StackBlitz environment'
+    );
     return null;
   }
 
@@ -158,7 +159,7 @@ export const onForegroundMessage = (cb: (payload: any) => unknown) => {
     console.warn('⚠️ Messaging not available for foreground messages');
     return () => {}; // Return empty cleanup function
   }
-  
+
   try {
     return onMessage(messaging, cb);
   } catch (error) {
