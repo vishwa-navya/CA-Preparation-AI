@@ -253,7 +253,17 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
       }
     };
   }, []);
-
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Only trigger if user is NOT typing in a text field
+    const tag = (e.target as HTMLElement).tagName;
+    if (e.key === '1' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      onLogout();
+    }
+  };
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [onLogout]);
   // Memory functions
   const handleOpenMemory = () => {
     setMemoryPassword("");
