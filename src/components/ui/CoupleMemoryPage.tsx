@@ -195,10 +195,34 @@ export default function CoupleMemoryPage({
 
   const isCurrentImageHot = (imgName: string) => hotMap[imgName] === true;
 
-  const formatImageDate = (createdAt: string) => {
-    if (!createdAt) return "Date unavailable";
-    const date = new Date(createdAt);
-    if (Number.isNaN(date.getTime())) return "Date unavailable";
+  // Extract the original send timestamp from the filename.
+  // Files are named: {nickname}_{Date.now()}_{originalName}.ext
+  // Date.now() is captured at send time, so it matches the Firestore
+  // message ts the Chat History page uses — unlike Supabase's created_at
+  // (upload-completion time), which can drift to a different day.
+  const extractTimestampFromName = (name: string): number | null => {
+    const match = name.match(/_(\d{10,13})_/);
+    if (!match) return null;
+    const value = Number(match[1]);
+    // ms timestamps are 13 digits; second timestamps are 10
+    return match[1].length === 10 ? value * 1000 : value;
+  };
+
+  const formatImageDate = (createdAt: string, name?: string) => {
+    let date: Date | null = null;
+
+    // 1. Prefer timestamp embedded in filename (matches Firestore send time)
+    if (name) {
+      const ts = extractTimestampFromName(name);
+      if (ts) date = new Date(ts);
+    }
+
+    // 2. Fall back to Supabase created_at if no filename timestamp
+    if (!date && createdAt) {
+      date = new Date(createdAt);
+    }
+
+    if (!date || Number.isNaN(date.getTime())) return "Date unavailable";
     return date.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
@@ -491,7 +515,7 @@ export default function CoupleMemoryPage({
                     )}
                   </div>
                   <div className="px-2 py-2 text-center text-xs font-semibold text-white drop-shadow">
-                    {formatImageDate(image.created_at)}
+                    {formatImageDate(image.created_at, image.name)}
                   </div>
                 </button>
               ))}
@@ -554,7 +578,7 @@ export default function CoupleMemoryPage({
               className="max-h-[calc(100vh-150px)] max-w-full object-contain"
             />
             <div className="mt-3 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-800">
-              {formatImageDate(fullscreenImage.created_at)}
+              {formatImageDate(fullscreenImage.created_at, fullscreenImage.name)}
             </div>
           </div>
 
