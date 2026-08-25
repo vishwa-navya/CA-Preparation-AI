@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Flame, Download, X, Play, Pause, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
+import { Flame, Download, X, Play, Pause, ChevronLeft, ChevronRight, MessageCircle, Grid3x3 as Grid3X3 } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useCoupleMemory } from "../../hooks/useCoupleMemory";
 import { useMemoriesNotification } from "../../hooks/useMemoriesNotification";
@@ -27,6 +27,7 @@ export default function CoupleMemoryPage({
 }: Props) {
   const [allImages, setAllImages] = useState<StorageImage[]>([]);
   const [isHotMode, setIsHotMode] = useState(false);
+  const [isAdvancedViewer, setIsAdvancedViewer] = useState(false);
   const [index, setIndex] = useState(0);
   const [fullscreenImage, setFullscreenImage] = useState<StorageImage | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -71,7 +72,7 @@ export default function CoupleMemoryPage({
 
   // Auto slide - 3 second interval (respects pause state)
   useEffect(() => {
-    if (!filteredImages.length || isPaused) {
+    if (!filteredImages.length || isPaused || isAdvancedViewer) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -88,7 +89,7 @@ export default function CoupleMemoryPage({
         clearInterval(intervalRef.current);
       }
     };
-  }, [filteredImages.length, isPaused]);
+  }, [filteredImages.length, isPaused, isAdvancedViewer]);
 
   // Reset index when mode changes
   useEffect(() => {
@@ -194,6 +195,22 @@ export default function CoupleMemoryPage({
 
   const isCurrentImageHot = (imgName: string) => hotMap[imgName] === true;
 
+  const formatImageDate = (createdAt: string) => {
+    if (!createdAt) return "Date unavailable";
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return "Date unavailable";
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const toggleAdvancedViewer = () => {
+    setIsAdvancedViewer((previous) => !previous);
+    setIsPaused(true);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -259,6 +276,19 @@ export default function CoupleMemoryPage({
             </button>
           )}
           <button
+            onClick={toggleAdvancedViewer}
+            className={`flex items-center gap-2 px-3 py-1 rounded-full shadow text-sm font-semibold transition-all ${
+              isAdvancedViewer
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            title={isAdvancedViewer ? "Use slideshow viewer" : "Use advanced file viewer"}
+            aria-pressed={isAdvancedViewer}
+          >
+            <Grid3X3 className="w-4 h-4" />
+            <span className="hidden sm:inline">{isAdvancedViewer ? "Slideshow" : "Advanced"}</span>
+          </button>
+          <button
             onClick={handleExit}
             className="px-3 py-1 bg-white text-black rounded-full shadow text-sm"
           >
@@ -282,7 +312,7 @@ export default function CoupleMemoryPage({
       </div>
 
       {/* IMAGE DISPLAY - Book style on desktop, simple on mobile */}
-      <div className="flex-1 flex items-center justify-center relative overflow-hidden px-4">
+      <div className={`flex-1 flex items-center justify-center relative overflow-hidden px-4 ${isAdvancedViewer ? "hidden" : ""}`}>
         {loading ? (
           <div className="text-white text-lg font-semibold opacity-70 animate-pulse">
             Loading images... ⏳
@@ -429,8 +459,53 @@ export default function CoupleMemoryPage({
         </div>
       </div>
 
+      {isAdvancedViewer && (
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
+          {loading ? (
+            <div className="flex h-full items-center justify-center text-white text-lg font-semibold opacity-70 animate-pulse">
+              Loading images...
+            </div>
+          ) : filteredImages.length > 0 ? (
+            <div className="mx-auto grid max-w-7xl grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+              {filteredImages.map((image, imageIndex) => (
+                <button
+                  key={image.name}
+                  type="button"
+                  onClick={() => openFullscreen(image)}
+                  className="group overflow-hidden rounded-xl bg-black/20 text-left shadow-lg ring-1 ring-white/30 transition-all hover:-translate-y-1 hover:bg-white/20 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-white"
+                >
+                  <div className="relative aspect-square overflow-hidden bg-black/20">
+                    <img
+                      src={image.url}
+                      alt={`Memory ${imageIndex + 1}`}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-1 text-[10px] font-semibold text-white">
+                      {imageIndex + 1}
+                    </span>
+                    {isHotMode && (
+                      <span className="absolute left-2 top-2 rounded-full bg-orange-500 px-2 py-1 text-[10px] font-semibold text-white">
+                        HOT
+                      </span>
+                    )}
+                  </div>
+                  <div className="px-2 py-2 text-center text-xs font-semibold text-white drop-shadow">
+                    {formatImageDate(image.created_at)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-white text-xl font-semibold opacity-70">
+              {isHotMode ? "No hot images yet" : "No images yet"}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* DESKTOP NAVIGATION CONTROLS - Below image */}
-      {!isMobile && filteredImages.length > 0 && (
+      {!isAdvancedViewer && !isMobile && filteredImages.length > 0 && (
         <div className="flex justify-center items-center gap-6 pb-6">
           {/* Previous Button */}
           <button
@@ -472,11 +547,16 @@ export default function CoupleMemoryPage({
       {/* FULLSCREEN IMAGE VIEW */}
       {fullscreenImage && (
         <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-          <img
-            src={fullscreenImage.url}
-            alt=""
-            className="max-h-full max-w-full object-contain"
-          />
+          <div className="flex max-h-full max-w-full flex-col items-center">
+            <img
+              src={fullscreenImage.url}
+              alt=""
+              className="max-h-[calc(100vh-150px)] max-w-full object-contain"
+            />
+            <div className="mt-3 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-800">
+              {formatImageDate(fullscreenImage.created_at)}
+            </div>
+          </div>
 
           {/* Smart Notification in fullscreen viewer header */}
           <div className="absolute top-0 left-0 right-0 flex justify-center items-center px-4 py-3 z-[101]">
