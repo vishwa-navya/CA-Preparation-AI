@@ -223,11 +223,10 @@ export default function CoupleMemoryPage({
     }
 
     if (!date || Number.isNaN(date.getTime())) return "Date unavailable";
-    return date.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+    const dd = String(date.getDate()).padStart(2, "0");
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   const toggleAdvancedViewer = () => {
