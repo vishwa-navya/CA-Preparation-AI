@@ -397,7 +397,7 @@ export default function CoupleMemoryPage({
             </div>
           ) : (
             /* DESKTOP: Book-style 3-panel carousel with counter on center image */
-            <div className="flex items-center justify-center gap-0 w-full max-w-[90%] h-[75%] relative">
+            <div className="flex min-h-0 items-center justify-center gap-0 w-full max-w-[90%] h-[calc(100vh-260px)] max-h-full relative">
               {/* LEFT PAGE - upcoming/next image (blurred) */}
               <div className="flex-shrink-0 w-[22%] h-full flex items-center justify-end overflow-hidden">
                 {prevImage ? (
@@ -422,13 +422,13 @@ export default function CoupleMemoryPage({
                 onClick={() => openFullscreen(currentImage)}
               >
                 <div
-                  className="relative bg-white/10 backdrop-blur-sm rounded-3xl shadow-2xl p-3 flex items-center justify-center transition-all duration-700"
+                  className="relative max-h-full max-w-full overflow-hidden bg-white/10 backdrop-blur-sm rounded-3xl shadow-2xl p-3 flex items-center justify-center transition-all duration-700"
                   style={{ maxHeight: "100%", maxWidth: "100%" }}
                 >
                   <img
                     src={currentImage.url}
                     alt=""
-                    className="max-h-[65vh] max-w-full rounded-2xl object-contain shadow-lg transition-all duration-700"
+                    className="max-h-[calc(100vh-290px)] max-w-full rounded-2xl object-contain shadow-lg transition-all duration-700"
                   />
                   {/* Counter on image - bottom right */}
                   <div className="absolute bottom-5 right-5 bg-white/80 backdrop-blur-sm text-black text-xs font-medium px-2 py-1 rounded-full shadow">
