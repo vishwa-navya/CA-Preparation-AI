@@ -355,6 +355,10 @@ export default function CoupleMemoryPage({
                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
                   {index + 1} / {filteredImages.length}
                 </div>
+                {/* Date on image - top left */}
+                <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                  {formatImageDate(currentImage.created_at, currentImage.name)}
+                </div>
               </div>
               
               {/* Compact Navigation Controls - Below image */}
@@ -433,6 +437,10 @@ export default function CoupleMemoryPage({
                   {/* Counter on image - bottom right */}
                   <div className="absolute bottom-5 right-5 bg-white/80 backdrop-blur-sm text-black text-xs font-medium px-2 py-1 rounded-full shadow">
                     {index + 1} / {filteredImages.length}
+                  </div>
+                  {/* Date on image - top left */}
+                  <div className="absolute top-5 left-5 bg-white/80 backdrop-blur-sm text-black text-xs font-medium px-2 py-1 rounded-full shadow">
+                    {formatImageDate(currentImage.created_at, currentImage.name)}
                   </div>
                 </div>
               </div>
