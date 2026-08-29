@@ -3,6 +3,18 @@ import { BookOpen, Send, LogOut, Trash2, ChevronDown, Sparkles } from 'lucide-re
 import RobotCloud from '../components/RobotCloud';
 import TypingIndicator from '../components/TypingIndicator';
 import { calculateSpacingForAllMessages } from '../lib/messageSpacing';
+import formatMarkdown from '../lib/markdown';
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  serverTimestamp,
+  doc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface Chat1Props {
   nickname: string;
@@ -14,7 +26,7 @@ interface AIMessage {
   text: string;
   by: string; // nickname for user, 'AI' for AI
   type: string;
-  ts: Date;
+  ts: any; // Firestore timestamp or Date
   replyTo?: { id: string; text: string; by: string } | null;
 }
 
@@ -34,7 +46,8 @@ Rules:
 - For exam preparation, structure answers with important keywords and points.
 - Always prioritize the student's provided content/context when they ask about it. Do not invent information that isn't in their content. If something is missing, say what is missing.
 - Be patient, encouraging, and student-friendly. Avoid unnecessary technical jargon unless the student asks for it.
-- Never use overly complicated language.`;
+- Never use overly complicated language.
+- Format your responses using Markdown: use **bold** for important terms and keywords, use bullet points with - for lists, use numbered lists where appropriate, and use headings with # for sections. This makes answers easier to read and study.`;
 
 // Minimal typing for the Puter.js global
 declare global {
@@ -54,20 +67,54 @@ declare global {
 
 const AI_TIMEOUT_MS = 60_000;
 
-let messageIdCounter = 0;
-const generateId = () => `ai-chat-${Date.now()}-${++messageIdCounter}`;
-
 function Chat1({ nickname, onLogout }: Chat1Props) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isAwaitingAIRef = useRef(false);
+  const messagesRef = useRef<AIMessage[]>([]);
+
+  // Keep messagesRef in sync so callPuterAI can read the latest history
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Each user gets their own collection so conversations persist across logins
+  const collectionName = `aiChat_${nickname}`;
+
+  // Subscribe to Firebase for this user's AI chat history
+  useEffect(() => {
+    setLoading(true);
+    const q = query(
+      collection(db, collectionName),
+      orderBy('ts', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const loaded = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as AIMessage[];
+        setMessages(loaded);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Firebase AI chat listener error:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [collectionName]);
 
   const spacingMap = useCallback(() => {
     return calculateSpacingForAllMessages(messages as any);
@@ -97,28 +144,36 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     setShowScrollButton(false);
   };
 
-  const formatMessageTime = (timestamp: Date): string => {
+  const formatMessageTime = (timestamp: any): string => {
     try {
-      if (!timestamp || isNaN(timestamp.getTime())) return '';
+      if (!timestamp) return '';
+      let date: Date;
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      } else if (timestamp instanceof Date) {
+        date = timestamp;
+      } else {
+        date = new Date(timestamp);
+      }
+      if (isNaN(date.getTime())) return '';
       const TZ = 'Asia/Kolkata';
       const dayFmt = new Intl.DateTimeFormat('en-IN', {
         timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
       });
-      const isToday = dayFmt.format(timestamp) === dayFmt.format(new Date());
+      const isToday = dayFmt.format(date) === dayFmt.format(new Date());
       if (isToday) {
         return new Intl.DateTimeFormat('en-US', {
           timeZone: TZ, hour: 'numeric', minute: '2-digit', hour12: true,
-        }).format(timestamp);
+        }).format(date);
       }
       return new Intl.DateTimeFormat('en-US', {
         timeZone: TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
-      }).format(timestamp);
+      }).format(date);
     } catch {
       return '';
     }
   };
 
-  // Wait for the Puter.js script to finish loading (it loads async from index.html)
   const waitForPuter = async (timeoutMs = 15_000): Promise<void> => {
     if (window.puter?.ai?.chat) return;
     const start = Date.now();
@@ -130,18 +185,11 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     }
   };
 
-  // Ensure the user is signed in to Puter before making AI calls.
-  // Puter shows its own sign-in popup; we just need to await it.
   const ensurePuterAuth = async (): Promise<void> => {
     const puter = window.puter;
     if (!puter) return;
-
-    // If auth API isn't available, skip (some Puter versions auto-auth)
     if (!puter.auth?.isSignedIn) return;
-
     if (puter.auth.isSignedIn()) return;
-
-    // Trigger sign-in popup and wait for it to complete
     if (puter.auth.signIn) {
       await puter.auth.signIn();
     }
@@ -167,7 +215,6 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
       throw new Error('AI is not available right now. Please refresh the page and try again.');
     }
 
-    // Race the AI call against a timeout so the indicator never hangs forever
     const response = await Promise.race([
       puter.ai.chat(conversation as any),
       new Promise<never>((_, reject) =>
@@ -179,11 +226,10 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
   };
 
   const callPuterAI = async (userMessage: string): Promise<string> => {
-    // Wait for the Puter.js script to be ready
     await waitForPuter();
 
-    // Build conversation history for context (last 10 messages)
-    const history = messages.slice(-10).map(m => ({
+    // Build conversation history from Firebase-persisted messages (last 10)
+    const history = messagesRef.current.slice(-10).map(m => ({
       role: m.by === 'AI' ? 'assistant' : 'user',
       content: m.text,
     }));
@@ -194,19 +240,23 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
       { role: 'user', content: userMessage },
     ];
 
-    // Make sure the user is authenticated with Puter first
     await ensurePuterAuth();
 
-    // First attempt
     try {
       return await callPuterAIOnce(conversation);
     } catch (firstErr: any) {
-      // If the first call fails (common right after sign-in popup closes),
-      // wait briefly and retry once
       console.warn('Puter AI first attempt failed, retrying...', firstErr);
       await new Promise(r => setTimeout(r, 1500));
       return await callPuterAIOnce(conversation);
     }
+  };
+
+  const saveMessageToFirebase = async (msg: Omit<AIMessage, 'id'>): Promise<string> => {
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...msg,
+      ts: serverTimestamp(),
+    });
+    return docRef.id;
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -217,18 +267,16 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     setError(null);
     isAwaitingAIRef.current = true;
 
-    // Add user message immediately
-    const userMsg: AIMessage = {
-      id: generateId(),
+    setMessage('');
+
+    // Save user message to Firebase immediately (Firestore listener will add it to UI)
+    const userMsgData = {
       text: userMessage,
       by: nickname,
       type: 'text',
-      ts: new Date(),
       replyTo: null,
     };
-    setMessages(prev => [...prev, userMsg]);
-
-    setMessage('');
+    const userId = await saveMessageToFirebase(userMsgData);
 
     // Show typing indicator
     setIsTyping(true);
@@ -236,29 +284,24 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     try {
       const aiText = await callPuterAI(userMessage);
 
-      const aiMsg: AIMessage = {
-        id: generateId(),
+      // Save AI response to Firebase
+      await saveMessageToFirebase({
         text: aiText,
         by: 'AI',
         type: 'text',
-        ts: new Date(),
-        replyTo: { id: userMsg.id, text: userMessage, by: nickname },
-      };
-      setMessages(prev => [...prev, aiMsg]);
+        replyTo: { id: userId, text: userMessage, by: nickname },
+      });
     } catch (err: any) {
       console.error('Puter AI error:', err);
       const errMsg = err?.message || 'Something went wrong. Please try again.';
       setError(errMsg);
-      // Also show the error as an AI message so the user can see it inline
-      const errorMsg: AIMessage = {
-        id: generateId(),
+      // Save error as AI message so it persists
+      await saveMessageToFirebase({
         text: `Sorry, I couldn't respond right now. ${errMsg}`,
         by: 'AI',
         type: 'text',
-        ts: new Date(),
-        replyTo: { id: userMsg.id, text: userMessage, by: nickname },
-      };
-      setMessages(prev => [...prev, errorMsg]);
+        replyTo: { id: userId, text: userMessage, by: nickname },
+      });
     } finally {
       setIsTyping(false);
       isAwaitingAIRef.current = false;
@@ -269,19 +312,33 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setMessage(value);
-    // Auto-resize
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
     }
   };
 
-  const handleClearChat = () => {
-    if (messages.length === 0) return;
-    if (window.confirm('Clear all messages in this conversation?')) {
-      setMessages([]);
-      setError(null);
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      await deleteDoc(doc(db, collectionName, messageId));
+    } catch (err) {
+      console.error('Failed to delete message:', err);
     }
+  };
+
+  const handleClearChat = async () => {
+    if (messages.length === 0) return;
+    if (!window.confirm('Clear all messages in this conversation?')) return;
+
+    // Delete each message from Firebase
+    for (const msg of messages) {
+      try {
+        await deleteDoc(doc(db, collectionName, msg.id));
+      } catch (err) {
+        console.error('Failed to delete message:', err);
+      }
+    }
+    setError(null);
   };
 
   const spMap = spacingMap();
@@ -340,7 +397,12 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
         className="max-w-4xl mx-auto p-4 relative z-10 h-screen overflow-y-auto"
         style={{ paddingTop: '90px', paddingBottom: '120px' }}
       >
-        {messages.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">📚</div>
+            <p className="text-gray-500">Loading your conversation...</p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="text-center py-12 sm:py-20">
             <div className="text-6xl mb-4">📚💡</div>
             <h2 className="text-xl font-bold text-gray-700 mb-2">Welcome to your B.Com Study Assistant!</h2>
@@ -374,6 +436,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
                   key={msg.id}
                   messageId={msg.id}
                   text={msg.text}
+                  renderedText={isAIMessage ? formatMarkdown(msg.text) : undefined}
                   isOwn={!isAIMessage}
                   isUser={!isAIMessage}
                   isAI={isAIMessage}
@@ -382,6 +445,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
                   timestamp={formatMessageTime(msg.ts)}
                   replyTo={msg.replyTo}
                   hasSpacing={hasSpacing}
+                  onDelete={handleDeleteMessage}
                 />
               );
             })}

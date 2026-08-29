@@ -13,6 +13,7 @@ import { getSpacingStyle } from '../lib/messageSpacing';
 interface RobotCloudProps {
   messageId: string;
   text: string;
+  renderedText?: React.ReactNode;
   imageUrl?: string;
   fileName?: string;
   videoUrl?: string;
@@ -40,6 +41,7 @@ interface RobotCloudProps {
 function RobotCloud({
   messageId,
   text,
+  renderedText,
   imageUrl,
   fileName,
   videoUrl,
@@ -238,6 +240,8 @@ function RobotCloud({
     if (type === 'image' || type === 'video') return 200;
     if (type === 'file') return 220;
     if (type === 'voice') return 200;
+    // AI messages with rendered Markdown need more room for headings/lists
+    if (renderedText) return 300;
     const avgCharWidth = 7;
     const lines = text.split('\n');
     const maxLineLength = Math.max(...lines.map(line => line.length));
@@ -258,7 +262,8 @@ function RobotCloud({
     const padding = 24;
     const minWidthForTimestamp = timestampWidth + padding + 8;
     const optimalWidth = Math.max(textWidth + padding, replyWidth + padding, minWidthForTimestamp);
-    return Math.min(Math.max(optimalWidth, 120), 300);
+    const maxWidth = renderedText ? 380 : 300;
+    return Math.min(Math.max(optimalWidth, 120), maxWidth);
   };
 
   const getEmoji = () => {
@@ -267,7 +272,7 @@ function RobotCloud({
   };
 
   const bgColor = isOwn ? 'bg-blue-100 border-blue-200' : 'bg-green-100 border-green-200';
-  const textColor = useBlackText ? 'text-black' : isOwn ? 'text-[#94bde6]' : 'text-[#b5d4f2]';
+  const textColor = useBlackText ? 'text-black' : isOwn ? 'text-[#94bde6]' : renderedText ? 'text-gray-800' : 'text-[#b5d4f2]';
 
   const dynamicWidth = getOptimalBubbleWidth();
 
@@ -283,7 +288,7 @@ function RobotCloud({
       data-message-id={messageId}
       style={spacingStyle}
     >
-      <div className="flex items-end gap-2 max-w-[80vw] sm:max-w-[320px]">
+      <div className={`flex items-end gap-2 max-w-[85vw] sm:max-w-[400px]`}>
         {!isOwn && <div className="text-2xl mb-1">{getEmoji()}</div>}
 
         <div className="flex flex-col">
@@ -400,8 +405,8 @@ function RobotCloud({
               </div>
             ) : (
               <div className="pb-2">
-                <p className={`text-sm whitespace-pre-wrap ${useBlackText ? 'text-black font-medium' : ''}`}>
-                  {text.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
+                <div className={`text-sm ${useBlackText ? 'text-black font-medium' : ''}`}>
+                  {renderedText ?? text.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
                     part.match(/https?:\/\/[^\s]+/) ? (
                       <a
                         key={index}
@@ -418,7 +423,7 @@ function RobotCloud({
                       <span key={index}>{part}</span>
                     )
                   )}
-                </p>
+                </div>
               </div>
             )}
 
@@ -454,7 +459,7 @@ function RobotCloud({
                   <Reply className="w-3 h-3" />
                 </button>
               )}
-              {onDelete && isOwn && (
+              {onDelete && (isOwn || isAI) && (
                 <button
                   onClick={handleDelete}
                   className="p-1 rounded-full bg-white hover:bg-gray-200 transition-colors text-black"
