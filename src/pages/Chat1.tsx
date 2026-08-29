@@ -43,9 +43,16 @@ declare global {
       ai: {
         chat: (prompt: string | Array<{ role: string; content: string }>, options?: any) => Promise<any>;
       };
+      auth: {
+        isSignedIn: () => boolean;
+        signIn: () => Promise<void>;
+        signOut: () => void;
+      };
     };
   }
 }
+
+const AI_TIMEOUT_MS = 60_000;
 
 let messageIdCounter = 0;
 const generateId = () => `ai-chat-${Date.now()}-${++messageIdCounter}`;
@@ -111,7 +118,70 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     }
   };
 
+  // Wait for the Puter.js script to finish loading (it loads async from index.html)
+  const waitForPuter = async (timeoutMs = 15_000): Promise<void> => {
+    if (window.puter?.ai?.chat) return;
+    const start = Date.now();
+    while (!window.puter?.ai?.chat) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error('AI is still loading. Please refresh the page and try again.');
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+  };
+
+  // Ensure the user is signed in to Puter before making AI calls.
+  // Puter shows its own sign-in popup; we just need to await it.
+  const ensurePuterAuth = async (): Promise<void> => {
+    const puter = window.puter;
+    if (!puter) return;
+
+    // If auth API isn't available, skip (some Puter versions auto-auth)
+    if (!puter.auth?.isSignedIn) return;
+
+    if (puter.auth.isSignedIn()) return;
+
+    // Trigger sign-in popup and wait for it to complete
+    if (puter.auth.signIn) {
+      await puter.auth.signIn();
+    }
+  };
+
+  const extractAIResponse = (response: any): string => {
+    if (typeof response === 'string') return response;
+    if (response?.message?.content) {
+      return typeof response.message.content === 'string'
+        ? response.message.content
+        : Array.isArray(response.message.content)
+          ? response.message.content.map((c: any) => c.text || '').join('')
+          : String(response.message.content);
+    }
+    if (response?.content) return String(response.content);
+    if (response?.text) return String(response.text);
+    return String(response || '');
+  };
+
+  const callPuterAIOnce = async (conversation: Array<{ role: string; content: string }>): Promise<string> => {
+    const puter = window.puter;
+    if (!puter?.ai?.chat) {
+      throw new Error('AI is not available right now. Please refresh the page and try again.');
+    }
+
+    // Race the AI call against a timeout so the indicator never hangs forever
+    const response = await Promise.race([
+      puter.ai.chat(conversation as any),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('The AI is taking too long to respond. Please try again.')), AI_TIMEOUT_MS)
+      ),
+    ]);
+
+    return extractAIResponse(response);
+  };
+
   const callPuterAI = async (userMessage: string): Promise<string> => {
+    // Wait for the Puter.js script to be ready
+    await waitForPuter();
+
     // Build conversation history for context (last 10 messages)
     const history = messages.slice(-10).map(m => ({
       role: m.by === 'AI' ? 'assistant' : 'user',
@@ -124,24 +194,19 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
       { role: 'user', content: userMessage },
     ];
 
-    if (!window.puter?.ai?.chat) {
-      throw new Error('AI is not available right now. Please refresh the page and try again.');
-    }
+    // Make sure the user is authenticated with Puter first
+    await ensurePuterAuth();
 
-    const response = await window.puter.ai.chat(conversation as any);
-
-    // Puter returns different shapes depending on version — handle them all
-    if (typeof response === 'string') return response;
-    if (response?.message?.content) {
-      return typeof response.message.content === 'string'
-        ? response.message.content
-        : Array.isArray(response.message.content)
-          ? response.message.content.map((c: any) => c.text || '').join('')
-          : String(response.message.content);
+    // First attempt
+    try {
+      return await callPuterAIOnce(conversation);
+    } catch (firstErr: any) {
+      // If the first call fails (common right after sign-in popup closes),
+      // wait briefly and retry once
+      console.warn('Puter AI first attempt failed, retrying...', firstErr);
+      await new Promise(r => setTimeout(r, 1500));
+      return await callPuterAIOnce(conversation);
     }
-    if (response?.content) return String(response.content);
-    if (response?.text) return String(response.text);
-    return String(response || '');
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -182,7 +247,18 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
       setMessages(prev => [...prev, aiMsg]);
     } catch (err: any) {
       console.error('Puter AI error:', err);
-      setError(err?.message || 'Something went wrong. Please try again.');
+      const errMsg = err?.message || 'Something went wrong. Please try again.';
+      setError(errMsg);
+      // Also show the error as an AI message so the user can see it inline
+      const errorMsg: AIMessage = {
+        id: generateId(),
+        text: `Sorry, I couldn't respond right now. ${errMsg}`,
+        by: 'AI',
+        type: 'text',
+        ts: new Date(),
+        replyTo: { id: userMsg.id, text: userMessage, by: nickname },
+      };
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsTyping(false);
       isAwaitingAIRef.current = false;
