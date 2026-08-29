@@ -1,28 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Send, LogOut, ChevronDown } from 'lucide-react';
-import { useChat } from '../hooks/useChat';
-import { useOptimizedTyping } from '../hooks/useOptimizedTyping';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BookOpen, Send, LogOut, Trash2, ChevronDown, Sparkles } from 'lucide-react';
 import RobotCloud from '../components/RobotCloud';
 import TypingIndicator from '../components/TypingIndicator';
-import { aiResponses } from '../data/aiResponses';
-import { correctTypos } from '../utils/typoCorrection';
-import { onSnapshot, doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { calculateSpacingForAllMessages } from '../lib/messageSpacing';
 
 interface Chat1Props {
   nickname: string;
   onLogout: () => void;
 }
 
+interface AIMessage {
+  id: string;
+  text: string;
+  by: string; // nickname for user, 'AI' for AI
+  type: string;
+  ts: Date;
+  replyTo?: { id: string; text: string; by: string } | null;
+}
+
+const SYSTEM_PROMPT = `You are a friendly B.Com and commerce study assistant. Your job is to help college students understand commerce-related academic content clearly and simply.
+
+Target students study: B.Com, B.Com Computer Applications, Commerce, Accounting, Finance, Economics, Business Studies, Corporate Accounting, Cost Accounting, Management Accounting, Taxation, Auditing, Business Law, Statistics, Banking, Marketing, Human Resource Management, Business Economics, Entrepreneurship, and other commerce-related subjects.
+
+Rules:
+- Explain difficult paragraphs in easy, simple language that a B.Com student can understand.
+- Summarize content without losing important meaning. Remove unnecessary words but keep definitions, facts, concepts, and keywords.
+- Extract key points as bullet points when asked.
+- Answer commerce questions clearly with definitions, explanations, important points, and examples where useful.
+- Solve accounting, finance, taxation, and numerical problems STEP BY STEP: state the formula, identify the values, show each calculation step, explain why each step is done, and give the final answer clearly.
+- For economics: explain the concept simply, give practical examples, explain cause and effect, and connect to real-world business situations.
+- For theory questions: give a direct definition first, then explain simply, then list important points, and give an example if useful.
+- Adjust answer depth to the student's request: 2-mark answers should be short and direct; 5-mark answers should be structured with enough explanation; 10-mark answers should be detailed with introduction, explanation, important points, examples, and conclusion.
+- For exam preparation, structure answers with important keywords and points.
+- Always prioritize the student's provided content/context when they ask about it. Do not invent information that isn't in their content. If something is missing, say what is missing.
+- Be patient, encouraging, and student-friendly. Avoid unnecessary technical jargon unless the student asks for it.
+- Never use overly complicated language.`;
+
+// Minimal typing for the Puter.js global
+declare global {
+  interface Window {
+    puter?: {
+      ai: {
+        chat: (prompt: string | Array<{ role: string; content: string }>, options?: any) => Promise<any>;
+      };
+    };
+  }
+}
+
+let messageIdCounter = 0;
+const generateId = () => `ai-chat-${Date.now()}-${++messageIdCounter}`;
+
 function Chat1({ nickname, onLogout }: Chat1Props) {
+  const [messages, setMessages] = useState<AIMessage[]>([]);
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [replyTo, setReplyTo] = useState<{ id: string; text: string; by: string } | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const { msgs, send, deleteMessage, loading } = useChat('publicMessages', nickname);
-  const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
+  const [error, setError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isAwaitingAIRef = useRef(false);
+
+  const spacingMap = useCallback(() => {
+    return calculateSpacingForAllMessages(messages as any);
+  }, [messages]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -30,266 +72,255 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShowScrollButton(!isAtBottom && msgs.length > 0);
+      setShowScrollButton(!isAtBottom && messages.length > 0);
     };
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [msgs.length]);
+  }, [messages.length]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [msgs]);
-
-  // Listen for AI typing status
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      doc(db, 'typing', 'AI'),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const timestamp = data.timestamp?.toDate();
-          const now = new Date();
-          const isRecentTyping = timestamp &&
-            (now.getTime() - timestamp.getTime()) < 5000;
-          setIsTyping(data.isTyping && isRecentTyping);
-        } else {
-          setIsTyping(false);
-        }
-      },
-      (error) => {
-        console.error('Error listening to AI typing:', error);
-        setIsTyping(false);
-      }
-    );
-    return unsubscribe;
-  }, []);
-
-  const updateAITypingStatus = async (typing: boolean) => {
-    try {
-      await setDoc(doc(db, 'typing', 'AI'), {
-        isTyping: typing,
-        timestamp: new Date()
-      });
-    } catch (error) {
-      console.error('Error updating AI typing status:', error);
-    }
-  };
-
-  const getAIResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase().trim();
-    const correctedMessage = correctTypos(lowerMessage);
-
-    if (aiResponses[correctedMessage]) {
-      return aiResponses[correctedMessage];
-    }
-    for (const [key, value] of Object.entries(aiResponses)) {
-      if (
-        correctedMessage.includes(key.toLowerCase()) ||
-        key.toLowerCase().includes(correctedMessage)
-      ) {
-        return value;
-      }
-    }
-    if (
-      correctedMessage.startsWith('another word of ') ||
-      correctedMessage.startsWith('meaning of ')
-    ) {
-      for (const [key, value] of Object.entries(aiResponses)) {
-        if (key.toLowerCase() === correctedMessage) {
-          return value;
-        }
-      }
-    }
-    return "Hmm… I'm thinking of your answer 🤖";
-  };
-
-  const handleReply = (messageId: string, text: string) => {
-    const msg = msgs.find((m) => m.id === messageId);
-    if (msg) {
-      setReplyTo({ id: messageId, text, by: msg.by });
-    }
-  };
-
-  const handleDeleteMessage = async (messageId: string) => {
-    await deleteMessage(messageId);
-  };
+    const timeout = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [messages, isTyping]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setShowScrollButton(false);
   };
 
-  const handleCancelReply = () => setReplyTo(null);
+  const formatMessageTime = (timestamp: Date): string => {
+    try {
+      if (!timestamp || isNaN(timestamp.getTime())) return '';
+      const TZ = 'Asia/Kolkata';
+      const dayFmt = new Intl.DateTimeFormat('en-IN', {
+        timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+      });
+      const isToday = dayFmt.format(timestamp) === dayFmt.format(new Date());
+      if (isToday) {
+        return new Intl.DateTimeFormat('en-US', {
+          timeZone: TZ, hour: 'numeric', minute: '2-digit', hour12: true,
+        }).format(timestamp);
+      }
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
+      }).format(timestamp);
+    } catch {
+      return '';
+    }
+  };
+
+  const callPuterAI = async (userMessage: string): Promise<string> => {
+    // Build conversation history for context (last 10 messages)
+    const history = messages.slice(-10).map(m => ({
+      role: m.by === 'AI' ? 'assistant' : 'user',
+      content: m.text,
+    }));
+
+    const conversation = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history,
+      { role: 'user', content: userMessage },
+    ];
+
+    if (!window.puter?.ai?.chat) {
+      throw new Error('AI is not available right now. Please refresh the page and try again.');
+    }
+
+    const response = await window.puter.ai.chat(conversation as any);
+
+    // Puter returns different shapes depending on version — handle them all
+    if (typeof response === 'string') return response;
+    if (response?.message?.content) {
+      return typeof response.message.content === 'string'
+        ? response.message.content
+        : Array.isArray(response.message.content)
+          ? response.message.content.map((c: any) => c.text || '').join('')
+          : String(response.message.content);
+    }
+    if (response?.content) return String(response.content);
+    if (response?.text) return String(response.text);
+    return String(response || '');
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
-
     const userMessage = message.trim();
-    const currentReplyTo = replyTo;
+    if (!userMessage || isAwaitingAIRef.current) return;
 
-    // 1️⃣ Send user message — stored with by: nickname (handled by useChat hook)
-    await send(userMessage, 'text', undefined, undefined, undefined, currentReplyTo);
+    setError(null);
+    isAwaitingAIRef.current = true;
+
+    // Add user message immediately
+    const userMsg: AIMessage = {
+      id: generateId(),
+      text: userMessage,
+      by: nickname,
+      type: 'text',
+      ts: new Date(),
+      replyTo: null,
+    };
+    setMessages(prev => [...prev, userMsg]);
 
     setMessage('');
-    setReplyTo(null);
-    stopTyping();
 
-    // 2️⃣ Show AI typing indicator
-    await updateAITypingStatus(true);
+    // Show typing indicator
+    setIsTyping(true);
 
-    const thinkingTime = Math.random() * 2000 + 1000; // 1–3 seconds
+    try {
+      const aiText = await callPuterAI(userMessage);
 
-    setTimeout(async () => {
-      const aiResponse = getAIResponse(userMessage);
-
-      // 3️⃣ Save AI message directly with by: 'AI'
-      // We use addDoc directly (NOT the send() hook) because send() always sets
-      // by: nickname. We need by: 'AI' so after refresh the message still renders
-      // on the LEFT side correctly.
-      try {
-        await addDoc(collection(db, 'publicMessages'), {
-          text: `🤖 ${aiResponse}`,
-          by: 'AI',
-          type: 'text',
-          ts: serverTimestamp(),
-          replyTo: currentReplyTo || null,
-        });
-      } catch (error) {
-        console.error('Error saving AI message:', error);
-      }
-
-      await updateAITypingStatus(false);
-    }, thinkingTime);
+      const aiMsg: AIMessage = {
+        id: generateId(),
+        text: aiText,
+        by: 'AI',
+        type: 'text',
+        ts: new Date(),
+        replyTo: { id: userMsg.id, text: userMessage, by: nickname },
+      };
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (err: any) {
+      console.error('Puter AI error:', err);
+      setError(err?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsTyping(false);
+      isAwaitingAIRef.current = false;
+      textareaRef.current?.focus();
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setMessage(value);
-    if (value.trim()) {
-      handleTyping();
-    } else {
-      stopTyping();
+    // Auto-resize
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
     }
   };
 
-  const formatMessageTime = (timestamp: any) => {
-    if (!timestamp) return '';
-    const messageDate = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const messageIST = new Date(messageDate.getTime() + istOffset);
-    const nowIST = new Date(new Date().getTime() + istOffset);
-    const todayStartIST = new Date(nowIST);
-    todayStartIST.setHours(0, 0, 0, 0);
-    const isToday = messageIST >= todayStartIST;
-    if (isToday) {
-      return messageIST.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: 'UTC'
-      });
-    } else {
-      return messageIST.toLocaleDateString('en-US', {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: 'UTC'
-      });
+  const handleClearChat = () => {
+    if (messages.length === 0) return;
+    if (window.confirm('Clear all messages in this conversation?')) {
+      setMessages([]);
+      setError(null);
     }
   };
+
+  const spMap = spacingMap();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-      {/* FIXED HEADER with safe-area support for Android */}
-      <div 
-        className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-b border-green-200 px-4 z-50 shadow-sm"
-        style={{ 
-          paddingTop: 'max(env(safe-area-inset-top, 16px), 16px)',
-          paddingBottom: '12px'
-        }}
-      >
-        <div className="flex items-center justify-between max-w-2xl mx-auto">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-6 h-6 text-green-600" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-              AI Teacher 📚
-            </h1>
+    <div className="h-full w-full bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
+      {/* ── HEADER — matching Chat2 style ── */}
+      <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-green-50/95 via-blue-50/95 to-purple-50/95 backdrop-blur-md px-4 py-4 z-50 shadow-lg border-b border-white/30">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                <BookOpen className="w-6 h-6 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent truncate">
+                  B.Com Study Assistant
+                </h1>
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-green-500" />
+                  AI-powered for commerce students
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-2 flex-shrink-0">
+              <button
+                onClick={handleClearChat}
+                disabled={messages.length === 0}
+                className="px-3 py-2 rounded-full text-sm sm:text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Clear conversation"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Exit</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all"
-          >
-            <LogOut className="w-4 h-4" />
-            Exit
-          </button>
         </div>
       </div>
 
       {/* Book Background Watermark */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-        <div className="text-9xl opacity-15 text-gray-500">📚</div>
+        <div className="text-9xl opacity-10 text-gray-500">📚</div>
       </div>
 
       {/* MESSAGES LIST */}
       <div
         ref={messagesContainerRef}
-        className="max-w-2xl mx-auto p-4 relative z-10 h-screen overflow-y-auto"
-        style={{ 
-          paddingTop: 'calc(max(env(safe-area-inset-top, 16px), 16px) + 70px)',
-          paddingBottom: '100px'
-        }}
+        className="max-w-4xl mx-auto p-4 relative z-10 h-screen overflow-y-auto"
+        style={{ paddingTop: '90px', paddingBottom: '120px' }}
       >
-        {loading && (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">📚</div>
-            <p className="text-gray-500">Loading messages...</p>
-          </div>
-        )}
-        <div className="space-y-6">
-          {msgs.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📚💡</div>
-              <p className="text-gray-500 italic">
-                Welcome to Doctors Study Portal! Ask me anything about your medical subjects...
-              </p>
+        {messages.length === 0 ? (
+          <div className="text-center py-12 sm:py-20">
+            <div className="text-6xl mb-4">📚💡</div>
+            <h2 className="text-xl font-bold text-gray-700 mb-2">Welcome to your B.Com Study Assistant!</h2>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Ask me anything about accounting, finance, economics, business law, taxation, statistics, and more.
+              Paste a paragraph to summarize or explain, or ask for exam-oriented answers.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-lg mx-auto">
+              {['Explain inflation simply', 'Summarize this paragraph', 'Give me a 5 mark answer on GST', 'Solve this accounting problem'].map(suggestion => (
+                <button
+                  key={suggestion}
+                  onClick={() => {
+                    setMessage(suggestion);
+                    textareaRef.current?.focus();
+                  }}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/80 text-green-700 border border-green-200 hover:bg-green-50 transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
-          ) : (
-            msgs.map((msg: any) => {
-              // ✅ THE CORE FIX for Chat1:
-              //
-              // Chat1 has NO concept of "my nickname vs someone else's nickname".
-              // The only rule is:
-              //   msg.by === 'AI'  →  LEFT side  (isOwn=false, isAI=true)
-              //   anything else   →  RIGHT side  (isOwn=true,  isAI=false)
-              //
-              // This works correctly even after refresh because we check msg.by
-              // from Firestore, not from the current session's nickname.
-              const isAIMessage = msg.by === 'AI' || msg.text?.startsWith('🤖');
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {messages.map((msg) => {
+              const isAIMessage = msg.by === 'AI';
+              const hasSpacing = spMap[msg.id] || false;
 
               return (
                 <RobotCloud
                   key={msg.id}
                   messageId={msg.id}
                   text={msg.text}
-                  isOwn={!isAIMessage}   // human message → right side
-                  isAI={isAIMessage}     // AI message   → left side
+                  isOwn={!isAIMessage}
                   isUser={!isAIMessage}
+                  isAI={isAIMessage}
                   type={msg.type}
                   currentUserNickname={nickname}
-                  onReply={handleReply}
-                  onDelete={handleDeleteMessage}
-                  replyTo={msg.replyTo}
                   timestamp={formatMessageTime(msg.ts)}
+                  replyTo={msg.replyTo}
+                  hasSpacing={hasSpacing}
                 />
               );
-            })
-          )}
-          {isTyping && <TypingIndicator nickname="AI" />}
-          <div ref={messagesEndRef} />
-        </div>
+            })}
+            {isTyping && <TypingIndicator nickname="AI" />}
+            {error && (
+              <div className="flex justify-center my-4">
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 max-w-md text-center">
+                  {error}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+            <div className="h-24"></div>
+          </div>
+        )}
       </div>
 
       {/* Scroll to bottom button */}
@@ -303,50 +334,51 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
         </button>
       )}
 
-      {/* Message Input */}
+      {/* Message Input — matching Chat2 style */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-green-200 p-4 z-50 shadow-lg">
-        {replyTo && (
-          <div className="max-w-2xl mx-auto mb-3">
-            <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-lg flex items-center justify-between">
-              <div>
-                <div className="text-xs text-blue-600 font-medium">Replying to AI</div>
-                <div className="text-sm text-gray-700 truncate">{replyTo.text}</div>
-              </div>
-              <button
-                onClick={handleCancelReply}
-                className="text-gray-400 hover:text-gray-600 ml-2"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
-        <form onSubmit={handleSendMessage} className="max-w-2xl mx-auto">
+        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <textarea
-                value={message}
-                onChange={handleInputChange}
-                placeholder="Ask me anything..."
-                className="w-full px-4 py-3 rounded-2xl border border-green-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 outline-none resize-none transition-all bg-white shadow-sm"
-                rows={1}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck="false"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                  } else if (e.key === 'Escape') {
-                    stopTyping();
-                  }
-                }}
-              />
+              <div className="relative">
+                <textarea
+                  value={message}
+                  onChange={handleInputChange}
+                  placeholder="Ask me about accounting, economics, taxation, or paste a paragraph to summarize..."
+                  className="w-full px-4 py-3 rounded-2xl border border-green-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 outline-none resize-none transition-all bg-white shadow-sm overflow-y-auto"
+                  rows={1}
+                  style={{
+                    minHeight: '48px',
+                    maxHeight: '120px',
+                    height: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain',
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  ref={(el) => {
+                    textareaRef.current = el;
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (message.trim() && !isAwaitingAIRef.current) {
+                        handleSendMessage(e);
+                      }
+                    }
+                  }}
+                />
+              </div>
             </div>
+
             <button
               type="submit"
-              disabled={!message.trim()}
-              className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-3 rounded-2xl hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl z-10"
+              disabled={!message.trim() || isTyping}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-3 rounded-full hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl z-10"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -356,12 +388,12 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
 
       {/* Floating Study Icons */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-20 left-5 text-green-200 text-2xl animate-bounce">🩺</div>
-        <div className="absolute top-40 right-8 text-emerald-200 text-xl animate-pulse">👨‍⚕️</div>
-        <div className="absolute bottom-32 left-12 text-teal-300 text-3xl animate-bounce">🩺</div>
-        <div className="absolute top-60 right-20 text-green-300 text-2xl animate-pulse">👩‍⚕️</div>
-        <div className="absolute bottom-60 left-20 text-emerald-300 text-xl animate-bounce">🩺</div>
-        <div className="absolute top-80 left-40 text-blue-300 text-2xl animate-pulse">👨‍⚕️</div>
+        <div className="absolute top-20 left-5 text-green-200 text-2xl animate-bounce">📚</div>
+        <div className="absolute top-40 right-8 text-emerald-200 text-xl animate-pulse">✏️</div>
+        <div className="absolute bottom-32 left-12 text-teal-300 text-3xl animate-bounce">📖</div>
+        <div className="absolute top-60 right-20 text-green-300 text-2xl animate-pulse">💡</div>
+        <div className="absolute bottom-60 left-20 text-emerald-300 text-xl animate-bounce">📝</div>
+        <div className="absolute top-80 left-40 text-blue-300 text-2xl animate-pulse">🎓</div>
       </div>
     </div>
   );
