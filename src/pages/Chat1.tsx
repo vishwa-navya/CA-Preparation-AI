@@ -3,7 +3,6 @@ import { BookOpen, Send, LogOut, Trash2, ChevronDown, Sparkles } from 'lucide-re
 import RobotCloud from '../components/RobotCloud';
 import TypingIndicator from '../components/TypingIndicator';
 import { calculateSpacingForAllMessages } from '../lib/messageSpacing';
-import formatMarkdown from '../lib/markdown';
 import {
   collection,
   query,
@@ -30,42 +29,10 @@ interface AIMessage {
   replyTo?: { id: string; text: string; by: string } | null;
 }
 
-const SYSTEM_PROMPT = `You are a friendly B.Com and commerce study assistant. Your job is to help college students understand commerce-related academic content clearly and simply.
-
-Target students study: B.Com, B.Com Computer Applications, Commerce, Accounting, Finance, Economics, Business Studies, Corporate Accounting, Cost Accounting, Management Accounting, Taxation, Auditing, Business Law, Statistics, Banking, Marketing, Human Resource Management, Business Economics, Entrepreneurship, and other commerce-related subjects.
-
-Rules:
-- Explain difficult paragraphs in easy, simple language that a B.Com student can understand.
-- Summarize content without losing important meaning. Remove unnecessary words but keep definitions, facts, concepts, and keywords.
-- Extract key points as bullet points when asked.
-- Answer commerce questions clearly with definitions, explanations, important points, and examples where useful.
-- Solve accounting, finance, taxation, and numerical problems STEP BY STEP: state the formula, identify the values, show each calculation step, explain why each step is done, and give the final answer clearly.
-- For economics: explain the concept simply, give practical examples, explain cause and effect, and connect to real-world business situations.
-- For theory questions: give a direct definition first, then explain simply, then list important points, and give an example if useful.
-- Adjust answer depth to the student's request: 2-mark answers should be short and direct; 5-mark answers should be structured with enough explanation; 10-mark answers should be detailed with introduction, explanation, important points, examples, and conclusion.
-- For exam preparation, structure answers with important keywords and points.
-- Always prioritize the student's provided content/context when they ask about it. Do not invent information that isn't in their content. If something is missing, say what is missing.
-- Be patient, encouraging, and student-friendly. Avoid unnecessary technical jargon unless the student asks for it.
-- Never use overly complicated language.
-- Format your responses using Markdown: use **bold** for important terms and keywords, use bullet points with - for lists, use numbered lists where appropriate, and use headings with # for sections. This makes answers easier to read and study.`;
-
-// Minimal typing for the Puter.js global
-declare global {
-  interface Window {
-    puter?: {
-      ai: {
-        chat: (prompt: string | Array<{ role: string; content: string }>, options?: any) => Promise<any>;
-      };
-      auth: {
-        isSignedIn: () => boolean;
-        signIn: () => Promise<void>;
-        signOut: () => void;
-      };
-    };
-  }
-}
-
-const AI_TIMEOUT_MS = 60_000;
+// ── NEW: Backend chatbot API (Groq-powered, replaces Puter.js) ────────────────
+const CHATBOT_API_URL = 'https://aichatbot2-423j.onrender.com/api/chat';
+const CHATBOT_TIMEOUT_MS = 45_000;
+const MAX_HISTORY_TURNS = 6; // matches backend's MAX_HISTORY_TURNS
 
 function Chat1({ nickname, onLogout }: Chat1Props) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -81,7 +48,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
   const isAwaitingAIRef = useRef(false);
   const messagesRef = useRef<AIMessage[]>([]);
 
-  // Keep messagesRef in sync so callPuterAI can read the latest history
+  // Keep messagesRef in sync so callChatbotAPI can read the latest history
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -174,80 +141,57 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     }
   };
 
-  const waitForPuter = async (timeoutMs = 15_000): Promise<void> => {
-    if (window.puter?.ai?.chat) return;
-    const start = Date.now();
-    while (!window.puter?.ai?.chat) {
-      if (Date.now() - start > timeoutMs) {
-        throw new Error('AI is still loading. Please refresh the page and try again.');
-      }
-      await new Promise(r => setTimeout(r, 200));
-    }
-  };
+  // ── NEW: Call the Groq-powered backend instead of Puter.js ──────────────────
+  // Backend expects: POST { message: string, history: [{role, content}] }
+  // Backend returns: { reply: string } or { error: string }
+  // Backend already strips markdown — response is plain text, matching Chat2's
+  // message rendering exactly (no special renderedText/markdown color needed)
+  const callChatbotAPI = async (userMessage: string): Promise<string> => {
+    // Build history from Firebase-persisted messages (last N turns, matches backend cap)
+    const history = messagesRef.current
+      .slice(-MAX_HISTORY_TURNS * 2) // *2 because each turn = user + assistant
+      .map(m => ({
+        role: m.by === 'AI' ? 'assistant' : 'user',
+        content: m.text,
+      }));
 
-  const ensurePuterAuth = async (): Promise<void> => {
-    const puter = window.puter;
-    if (!puter) return;
-    if (!puter.auth?.isSignedIn) return;
-    if (puter.auth.isSignedIn()) return;
-    if (puter.auth.signIn) {
-      await puter.auth.signIn();
-    }
-  };
-
-  const extractAIResponse = (response: any): string => {
-    if (typeof response === 'string') return response;
-    if (response?.message?.content) {
-      return typeof response.message.content === 'string'
-        ? response.message.content
-        : Array.isArray(response.message.content)
-          ? response.message.content.map((c: any) => c.text || '').join('')
-          : String(response.message.content);
-    }
-    if (response?.content) return String(response.content);
-    if (response?.text) return String(response.text);
-    return String(response || '');
-  };
-
-  const callPuterAIOnce = async (conversation: Array<{ role: string; content: string }>): Promise<string> => {
-    const puter = window.puter;
-    if (!puter?.ai?.chat) {
-      throw new Error('AI is not available right now. Please refresh the page and try again.');
-    }
-
-    const response = await Promise.race([
-      puter.ai.chat(conversation as any),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('The AI is taking too long to respond. Please try again.')), AI_TIMEOUT_MS)
-      ),
-    ]);
-
-    return extractAIResponse(response);
-  };
-
-  const callPuterAI = async (userMessage: string): Promise<string> => {
-    await waitForPuter();
-
-    // Build conversation history from Firebase-persisted messages (last 10)
-    const history = messagesRef.current.slice(-10).map(m => ({
-      role: m.by === 'AI' ? 'assistant' : 'user',
-      content: m.text,
-    }));
-
-    const conversation = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...history,
-      { role: 'user', content: userMessage },
-    ];
-
-    await ensurePuterAuth();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), CHATBOT_TIMEOUT_MS);
 
     try {
-      return await callPuterAIOnce(conversation);
-    } catch (firstErr: any) {
-      console.warn('Puter AI first attempt failed, retrying...', firstErr);
-      await new Promise(r => setTimeout(r, 1500));
-      return await callPuterAIOnce(conversation);
+      const res = await fetch(CHATBOT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage, history }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      let data: any = {};
+      try { data = await res.json(); } catch {}
+
+      if (!res.ok) {
+        // Backend sends structured errors like rate limits, message-too-long, etc.
+        throw new Error(data?.error || `Server error (${res.status}). Please try again.`);
+      }
+
+      if (!data.reply) {
+        throw new Error('No response received. Please try again.');
+      }
+
+      return data.reply;
+
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('The AI is taking too long to respond. Please try again.');
+      }
+      // Network error (backend cold-starting on Render free tier, etc.)
+      if (err.message?.includes('fetch')) {
+        throw new Error('Could not reach the AI server. It may be waking up — please try again in a few seconds.');
+      }
+      throw err;
     }
   };
 
@@ -282,9 +226,9 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
     setIsTyping(true);
 
     try {
-      const aiText = await callPuterAI(userMessage);
+      const aiText = await callChatbotAPI(userMessage);
 
-      // Save AI response to Firebase
+      // Save AI response to Firebase — plain text, no markdown
       await saveMessageToFirebase({
         text: aiText,
         by: 'AI',
@@ -292,7 +236,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
         replyTo: { id: userId, text: userMessage, by: nickname },
       });
     } catch (err: any) {
-      console.error('Puter AI error:', err);
+      console.error('Chatbot API error:', err);
       const errMsg = err?.message || 'Something went wrong. Please try again.';
       setError(errMsg);
       // Save error as AI message so it persists
@@ -345,7 +289,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
 
   return (
     <div className="h-full w-full bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-      {/* ── HEADER — matching Chat2 style ── */}
+      {/* ── HEADER — matching Chat2 style exactly ── */}
       <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-green-50/95 via-blue-50/95 to-purple-50/95 backdrop-blur-md px-4 py-4 z-50 shadow-lg border-b border-white/30">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
@@ -386,7 +330,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
         </div>
       </div>
 
-      {/* Book Background Watermark */}
+      {/* Book Background Watermark — matching Chat2's watermark style */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <div className="text-9xl opacity-10 text-gray-500">📚</div>
       </div>
@@ -436,7 +380,18 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
                   key={msg.id}
                   messageId={msg.id}
                   text={msg.text}
-                  renderedText={isAIMessage ? formatMarkdown(msg.text) : undefined}
+                  /*
+                    NOTE: renderedText intentionally NOT passed here.
+                    The backend already strips all markdown (see cleanText()
+                    in server.js), so msg.text is always plain text.
+                    Without renderedText, RobotCloud falls through to its
+                    DEFAULT text color logic — which is the EXACT SAME color
+                    scheme Chat2 uses:
+                      - own messages  → text-[#94bde6] (blue bubble)
+                      - AI/incoming   → text-[#b5d4f2] (green bubble)
+                    This is what makes Chat1's AI text color automatically
+                    match Chat2 with zero changes needed in RobotCloud.tsx.
+                  */
                   isOwn={!isAIMessage}
                   isUser={!isAIMessage}
                   isAI={isAIMessage}
