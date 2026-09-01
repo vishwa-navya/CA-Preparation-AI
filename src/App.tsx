@@ -291,6 +291,9 @@ function App() {
                 type="text"
                 value={inputNickname}
                 onChange={(e) => setInputNickname(e.target.value)}
+                onFocus={() => {
+                  if (isSafe && !safetyLoading) toggleSafety();
+                }}
                 className="w-full px-4 py-3 rounded-2xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 placeholder="Enter your name..."
                 required
