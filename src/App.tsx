@@ -168,17 +168,21 @@ function App() {
     setCurrentPage('chat1');
   };
 
-  // Quick login buttons (books)
+  // Quick login buttons (books) — auto-switch stethoscope → injection
+  // immediately after clicking a book icon, for extra safety. This blocks
+  // the other book icon until someone manually toggles back to stethoscope.
   const loginAsVishwa = () => {
     if (!isSafe) return; // blocked
     setNickname('Vishwa');
     setCurrentPage('chat2');
+    if (!safetyLoading) toggleSafety();
   };
 
   const loginAsAmmu = () => {
     if (!isSafe) return; // blocked
     setNickname('Ammu');
     setCurrentPage('chat2');
+    if (!safetyLoading) toggleSafety();
   };
 
   const handleLogout = () => {
