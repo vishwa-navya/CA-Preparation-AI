@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { lastSeenDb } from '../firebase-lastseen';
+import { db } from '../firebase';
 
 interface UseAmmeSafetyLogoutProps {
   nickname: string | undefined;
@@ -20,14 +23,32 @@ export function useAmmeSafetyLogout({ nickname, onLogout, isEnabled = true }: Us
   };
 
   useEffect(() => {
-    if (!isEnabled || nickname !== 'Ammu') return;
+    if (!isEnabled || !nickname) return;
 
     const safeLogout = (reason: string) => {
       if (logoutTriggeredRef.current) return;
       if (skipLogoutRef.current) return;  // 🚫 DO NOT LOGOUT while media window opens
 
       logoutTriggeredRef.current = true;
-      console.warn(`🔐 Ammu safety logout: ${reason}`);
+      console.warn(`🔐 Safety logout (${nickname}): ${reason}`);
+
+      // Write offline presence immediately so the other user sees "offline"
+      // right away and notifications fire when they send a message.
+      try {
+        setDoc(doc(lastSeenDb, 'presence', nickname), {
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+          lastActivity: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+
+        setDoc(doc(db, 'users', nickname), {
+          isActive: false,
+          lastUpdate: new Date(),
+        }, { merge: true }).catch(() => {});
+      } catch (err) {
+        console.warn('Failed to write offline presence:', err);
+      }
+
       onLogout();
     };
 

@@ -1,13 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { lastSeenDb } from '../firebase-lastseen';
+import { db } from '../firebase';
 
 export function useEmergencyExit(nickname: 'Vishwa' | 'Ammu') {
   const ignoreNextBlur = useRef(false);
 
   useEffect(() => {
-    if (nickname !== 'Ammu') return;
+    if (nickname !== 'Vishwa' && nickname !== 'Ammu') return;
 
     // Skip on any touch-capable device (phones, tablets, iPads in desktop mode)
+    // — phone power/home/back button events are handled by the pagehide event
+    // and the visibilitychange handler in useAmmeSafetyLogout.
     const isTouchDevice =
       /iPhone|iPad|Android|Mobile|Tablet/i.test(navigator.userAgent) ||
       navigator.maxTouchPoints > 0 ||
@@ -20,6 +25,23 @@ export function useEmergencyExit(nickname: 'Vishwa' | 'Ammu') {
         console.log('[EmergencyExit] Skip flag active — ignoring logout trigger');
         return;
       }
+
+      // Write offline presence immediately so the other user sees "offline"
+      try {
+        setDoc(doc(lastSeenDb, 'presence', nickname), {
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+          lastActivity: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+
+        setDoc(doc(db, 'users', nickname), {
+          isActive: false,
+          lastUpdate: new Date(),
+        }, { merge: true }).catch(() => {});
+      } catch (err) {
+        console.warn('[EmergencyExit] Failed to write offline presence:', err);
+      }
+
       await supabase.auth.signOut();
       window.location.replace('/login');
     };
