@@ -8,7 +8,7 @@ export function useEmergencyExit(nickname: 'Vishwa' | 'Ammu') {
   const ignoreNextBlur = useRef(false);
 
   useEffect(() => {
-    if (nickname !== 'Vishwa' && nickname !== 'Ammu') return;
+    if (nickname !== 'Ammu') return;
 
     // Skip on any touch-capable device (phones, tablets, iPads in desktop mode)
     // — phone power/home/back button events are handled by the pagehide event

@@ -23,7 +23,7 @@ export function useAmmeSafetyLogout({ nickname, onLogout, isEnabled = true }: Us
   };
 
   useEffect(() => {
-    if (!isEnabled || !nickname) return;
+    if (!isEnabled || nickname !== 'Ammu') return;
 
     const safeLogout = (reason: string) => {
       if (logoutTriggeredRef.current) return;
