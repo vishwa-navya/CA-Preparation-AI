@@ -965,6 +965,21 @@ io.on("connection", (socket) => {
     }
   });
 
+  // User went offline (tab hidden) but socket still connected
+  socket.on("presence-offline", ({ user }) => {
+    const socketUser = socket.data.user || user;
+    if (!socketUser) return;
+    // Broadcast offline to the other user
+    broadcastPresence(socketUser, false);
+  });
+
+  // User came back (tab visible again)
+  socket.on("presence-online", () => {
+    const user = socket.data.user;
+    if (!user) return;
+    broadcastPresence(user, true);
+  });
+
   // ========================
   // TYPING INDICATORS (via Socket.IO - instant, zero Firebase cost)
   // ========================

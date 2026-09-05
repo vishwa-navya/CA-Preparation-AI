@@ -66,6 +66,7 @@ export function useSocketPresence({
       } else {
         // Resume heartbeat when tab becomes visible again
         if (socket.connected && !heartbeatRef.current) {
+          socket.emit('presence-online', { user: userId });
           socket.emit('presence-heartbeat');
           heartbeatRef.current = setInterval(() => {
             if (socket.connected) {
