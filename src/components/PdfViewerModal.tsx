@@ -78,7 +78,7 @@ function PdfViewerModal({ fileUrl, fileName, isOpen, onClose }: PdfViewerModalPr
         </button>
       </div>
 
-      <div className="flex-1 w-full flex items-center justify-center">
+      <div className="flex-1 w-full flex items-center justify-center relative">
         {viewerUrl ? (
           <iframe src={viewerUrl} className="w-full h-full border-0" title={fileName} />
         ) : loadError ? (
@@ -95,6 +95,16 @@ function PdfViewerModal({ fileUrl, fileName, isOpen, onClose }: PdfViewerModalPr
           <div className="text-white">Loading PDF...</div>
         )}
       </div>
+
+      {/* Floating red cancel button — right-center edge */}
+      <button
+        onClick={onClose}
+        className="fixed top-1/2 right-4 -translate-y-1/2 z-[70] bg-red-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 active:scale-95 transition-all"
+        title="Close PDF"
+        aria-label="Close PDF"
+      >
+        <X className="w-7 h-7" />
+      </button>
     </div>
   );
 }
