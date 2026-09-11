@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Reply, Trash2, Star, Download, FileText, Flame } from 'lucide-react';
+import { Reply, Trash2, Star, Download, FileText, Flame, Eye } from 'lucide-react';
 import ImagePreviewModal from './ImagePreviewModal';
+import PdfViewerModal from './PdfViewerModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import { useMemory } from '../hooks/useMemory';
 import { useCoupleMemory } from '../hooks/useCoupleMemory';
@@ -66,6 +67,7 @@ function RobotCloud({
   silentReadActive = false
 }: RobotCloudProps) {
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { saveToMemory, removeFromMemory, isInMemory } = useMemory(currentUserNickname as 'Vishwa' | 'Ammu');
   const { toggleHot, fetchAllHotStatuses, hotMap } = useCoupleMemory();
@@ -395,13 +397,24 @@ function RobotCloud({
                     <div className="text-xs text-gray-500">{mimeType?.split('/')[1]?.toUpperCase() || 'FILE'}</div>
                   </div>
                 </div>
-                <button
-                  onClick={handleFileDownload}
-                  className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Download File
-                </button>
+                <div className="mt-2 flex gap-2">
+                  {(mimeType === 'application/pdf' || /\.pdf$/i.test(fileName || '')) && (
+                    <button
+                      onClick={() => setShowPdfModal(true)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Open
+                    </button>
+                  )}
+                  <button
+                    onClick={handleFileDownload}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="pb-2">
@@ -511,6 +524,15 @@ function RobotCloud({
           fileName={fileName || 'Image'}
           isOpen={showImageModal}
           onClose={() => setShowImageModal(false)}
+        />
+      )}
+
+      {fileUrl && (mimeType === 'application/pdf' || /\.pdf$/i.test(fileName || '')) && (
+        <PdfViewerModal
+          fileUrl={fileUrl}
+          fileName={fileName || 'Document.pdf'}
+          isOpen={showPdfModal}
+          onClose={() => setShowPdfModal(false)}
         />
       )}
 
