@@ -52,33 +52,6 @@ export function useSocketPresence({
 
     socketRef.current = socket;
 
-    // ---------- VISIBILITY: go offline when tab hidden, resume when visible ----------
-    const handleVisibility = () => {
-      if (document.hidden) {
-        // Stop heartbeat and notify server we're offline
-        if (heartbeatRef.current) {
-          clearInterval(heartbeatRef.current);
-          heartbeatRef.current = null;
-        }
-        if (socket.connected) {
-          socket.emit('presence-offline', { user: userId });
-        }
-      } else {
-        // Resume heartbeat when tab becomes visible again
-        if (socket.connected && !heartbeatRef.current) {
-          socket.emit('presence-online', { user: userId });
-          socket.emit('presence-heartbeat');
-          heartbeatRef.current = setInterval(() => {
-            if (socket.connected) {
-              socket.emit('presence-heartbeat');
-            }
-          }, 2000);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-
     socket.on('connect', () => {
       console.log('[SocketPresence] Connected');
       socket.emit('register', { user: userId, callType: 'presence' });
@@ -140,7 +113,6 @@ export function useSocketPresence({
         clearInterval(heartbeatRef.current);
         heartbeatRef.current = null;
       }
-      document.removeEventListener('visibilitychange', handleVisibility);
       socket.disconnect();
       socketRef.current = null;
     };
