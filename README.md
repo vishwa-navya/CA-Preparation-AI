@@ -1,367 +1,2969 @@
-# Doctor's Study Portal - Firestore Optimization Guide
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile } from 'lucide-react';
+import InstagramPlusButton from '../components/InstagramPlusButton';
+import MoodPicker from '../components/MoodPicker';
+import MoodDisplay from '../components/MoodDisplay';
+import ReplyToMoodPill from '../components/ReplyToMoodPill';
+import { useChat } from '../hooks/useChat';
+import { useMood } from '../hooks/useMood';
+import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTyping';
+import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
+import KissEmojiRain from '../components/KissEmojiRain';
+import RobotCloud from '../components/RobotCloud';
+import MoodReactor from '../components/MoodReactor';
+import { useMessageSeen } from '../hooks/useMessageSeen';
+import { useTabVisibility } from '../hooks/useTabVisibility';
+import TypingIndicator from '../components/TypingIndicator';
+import { uploadImageToSupabase, uploadVideoToSupabase, uploadFileToSupabase, revokePreviewUrl } from '../lib/supabase';
+import { shouldAddSpacing, calculateSpacingForAllMessages } from '../lib/messageSpacing';
+import { onSnapshot, doc, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
+import { db } from '../firebase';
+import { lastSeenDb } from '../firebase-lastseen';
+import { useMoodReactor } from '../hooks/useMoodReactor';
+import { useHugDetection } from '../hooks/useHugDetection';
+import { useLastSeen } from '../hooks/useLastSeen';
+import PresenceIndicator from '../components/PresenceIndicator';
+import PresenceDebugPanel from '../components/PresenceDebugPanel';
+import { useFaceDetection } from '../hooks/useFaceDetection';
+import { useCameraState } from '../hooks/useCameraState';
+import CameraButton from '../components/CameraButton';
+import EmojiPicker from '../components/EmojiPicker';
+import EmojiMiniBar from '../components/EmojiMiniBar';
+import { useFrequentEmojis } from '../hooks/useFrequentEmojis';
+import VideoPreviewModal from '../components/VideoPreviewModal';
+import FilePreviewModal from '../components/FilePreviewModal';
+import { useAmmeSafetyLogout } from '../hooks/useAmmeSafetyLogout';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { VoiceMessagePreview } from '../components/VoiceMessagePreview';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import VoiceMessageInline from '../components/VoiceMessageInline';
+import CoupleMemoryPage from '../components/ui/CoupleMemoryPage';
+import { createDownscaledPreview, createPreviewUrl, detectDeviceCapabilities } from '../lib/imageCompression';
 
-## 🔥 Firestore Usage Optimizations Implemented
+// ── Camera sharing imports ────────────────────────────────────────────────
+import { useWebRTCCamera } from '../hooks/useWebRTCCamera';
+import CameraShareOverlay from '../components/CameraShareOverlay';
+import { useVoiceCall } from '../hooks/useVoiceCall';
+import BookIconMenu from '../components/BookIconMenu';
+import LovePulse from '../components/LovePulse';
+import { useLovePulse } from '../hooks/useLovePulse';
+import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
 
-### 1. **Message Pagination & Limiting**
-- Limited real-time queries to last 50 messages only
-- Reduced from unlimited message loading to paginated approach
-- **Savings**: ~80% reduction in read operations
+// ── NEW: Screen sharing imports ────────────────────────────────────────────────
+import { useScreenShare, useScreenShareViewer } from '../hooks/useScreenShare';
+import ScreenShareOverlay from '../components/ScreenShareOverlay';
+// ──────────────────────────────────────────────────────────────────────────────
 
-### 2. **Optimized Typing Indicators**
-- Debounced typing updates (max once every 3 seconds)
-- Added timestamp validation for typing status
-- Auto-expire typing indicators after 4-5 seconds
-- **Savings**: ~90% reduction in typing-related writes
-
-### 3. **Smart Activity Tracking**
-- Reduced activity update frequency (max once every 30 seconds)
-- Decreased activity timeout from 8 to 5 minutes
-- Fewer DOM events trigger activity updates
-- **Savings**: ~85% reduction in activity writes
-
-### 4. **Client-Side Filtering**
-- Moved message filtering to client-side where possible
-- Reduced server-side query complexity
-- **Savings**: ~60% reduction in complex query reads
-
-### 5. **Connection Management**
-- Proper cleanup of Firestore listeners
-- Prevented duplicate listeners
-- Added error handling for failed connections
-- **Savings**: Eliminates redundant connections
-
-### 6. **Batch Operations**
-- Grouped related operations together
-- Reduced individual document writes
-- **Savings**: ~40% reduction in write operations
-
-## 📊 Expected Usage Reduction
-
-| Operation Type | Before | After | Reduction |
-|----------------|--------|-------|-----------|
-| Message Reads | ~2000/day | ~400/day | 80% |
-| Typing Writes | ~500/day | ~50/day | 90% |
-| Activity Writes | ~800/day | ~120/day | 85% |
-| **Total Operations** | **~3300/day** | **~570/day** | **83%** |
-
-## ✅ Fixed Issues (Latest Update)
-
-### Real-time Functionality Restored:
-- **Messages now load properly** in both Chat1 and Chat2
-- **Sent messages appear immediately** after sending
-- **Online/offline status working** again
-- **Typing indicators functioning** correctly
-- **Old messages visible** when entering chat pages
-
-### Maintained Optimizations:
-- Message limiting (50 messages max)
-- Debounced typing updates
-- Smart activity tracking
-- Client-side filtering
-- Proper listener cleanup
-
-## 🚀 Additional Recommendations
-
-### For Production Use:
-1. **Implement Message Archiving**: Move old messages to cheaper storage
-2. **Use Firestore Bundles**: Pre-load common data
-3. **Add Offline Support**: Reduce real-time dependency
-4. **Implement Message Compression**: Reduce storage costs
-5. **Use Cloud Functions**: Move heavy operations server-side
-
-### Monitoring:
-- Check Firestore usage in Firebase Console daily
-- Set up billing alerts at 80% of quota
-- Monitor query performance in Firebase Performance
-
-## 🔧 Configuration Options
-
-You can further tune the optimization by adjusting these values in the code:
-
-```typescript
-// In useChat.ts
-limit(50) // Reduce to 25 for even fewer reads
-
-// In useOptimizedTyping.ts  
-if (now - lastTypingUpdate.current < 3000) // Increase to 5000ms
-
-// In useOptimizedActivity.ts
-if (now - lastActivityUpdate.current < 30000) // Increase to 60000ms
-```
-
-## 📈 Usage Monitoring
-
-The app now includes:
-- Loading states to show when data is being fetched
-- Error handling for failed operations
-- Automatic retry logic for critical operations
-- Better user feedback during network issues
-
-With these optimizations, your 20-30 messages should now consume approximately:
-- **Reads**: ~50-100 per session (vs 1000+ before)
-- **Writes**: ~10-20 per session (vs 200+ before)
-- **Storage**: Minimal impact with message limiting
-
-This should keep you well within the free tier limits even with extended usage.
-
-## 🎯 Current Status: FULLY FUNCTIONAL
-
-✅ All real-time features working  
-✅ Messages sync properly  
-✅ Online/offline status accurate  
-✅ Typing indicators responsive  
-✅ Optimizations maintained  
-✅ Quota usage reduced by ~83%
-
-## 📱 Advanced Presence Tracking System
-
-### New Features Added:
-
-#### 🔄 **Real-time Presence Detection**
-- **Page Visibility API**: Detects when user switches tabs, minimizes app, or presses power button
-- **Window Focus/Blur**: Additional layer for desktop users
-- **Network Status**: Handles online/offline network changes
-- **Heartbeat System**: Maintains online status with 30-second intervals
-- **Activity Tracking**: Monitors user interaction (mouse, keyboard, touch)
-
-#### 📱 **Mobile-Specific Handling**
-- **Back Button**: Immediately sets status to offline when user navigates away
-- **Home Button**: Detects when app goes to background
-- **App Minimize**: Tracks when app is minimized or switched
-- **Power Button**: Detects screen lock/unlock events
-- **Tab Switching**: Handles switching between browser tabs
-
-#### 🛡️ **Reliability Features**
-- **Throttled Updates**: Prevents excessive Firestore writes (max once every 5 seconds)
-- **Force Updates**: Immediate updates when going offline
-- **Error Handling**: Graceful fallbacks for network issues
-- **Beacon API**: Reliable offline updates during page unload
-- **Connection Recovery**: Automatic reconnection when network returns
-
-#### 🔧 **Debug Tools** (Development Only)
-- **Debug Panel**: Real-time event monitoring
-- **Event Logging**: Track all presence-related events
-- **Status Overview**: Current connection and visibility state
-- **Event History**: Last 20 presence events with timestamps
-
-### How It Works:
-
-1. **User Opens App**: Status immediately changes to "online"
-2. **User Leaves App** (any method): Status immediately changes to "last seen [time]"
-3. **User Returns**: Status immediately changes back to "online"
-4. **Network Issues**: Shows "connecting..." status during reconnection
-5. **Inactivity**: Maintains online status but updates activity timestamp
-
-### Supported Scenarios:
-
-✅ **Mobile Browser**: Back button, home button, app switching  
-✅ **Mobile PWA**: All mobile gestures and power button  
-✅ **Desktop**: Tab switching, window minimize, browser close  
-✅ **Network Changes**: WiFi disconnect/reconnect, mobile data switching  
-✅ **Power Events**: Screen lock/unlock, device sleep/wake  
-
-### Performance Impact:
-- **Firestore Writes**: Reduced by 60% with smart throttling
-- **Real-time Updates**: Instant status changes for better UX
-- **Battery Friendly**: Optimized for mobile devices
-- **Network Efficient**: Minimal data usage with heartbeat system
-
-The system now provides **instant and accurate** presence tracking across all devices and scenarios, ensuring users always see the correct online/offline status.
+const BACKEND_URL = "https://notification2.onrender.com"; //// vishwanavyasree account 12/5/26
 
 
-This is an updated voice call feature I want to implement in my private chat app. The app already has a working backend using Socket.IO deployed at this endpoint:  
-https://voice-call-server-b4l9.onrender.com
-
-Here’s the new Add-1 behavior I want:
-
-1. Inside Chat2, near the AI icon, there is a 📞 call icon.
-
-2. If *Vishwa clicks the call button* while inside Chat2:
-   - The entire Chat2 screen should *disappear*.
-   - A *full white screen* should appear showing:  
-     You are calling Ammu...  
-     with a red *End Call 🔴* button.
-
-3. If Ammu is online:
-   - Her Chat2 also *disappears* immediately.
-   - She sees the *full white screen* showing:  
-     You are getting a call from Vishwa...  
-     and a green *Answer 🟢* button.
-
-4. If Ammu clicks *Answer*:
-   - Both users now see:  
-     You are on a call with [other user]  
-     and an *End Call 🔴* button.
-
-5. During the call:
-   - The white call screen *must occupy the entire screen*.
-   - The Chat2 interface should be fully hidden.
-
-6. If *either user clicks End Call*:
-   - The call ends immediately for both.
-   - They should be *navigated back to Chat2*, not to the login page.
-
-This should work only when both users are online.  
-No video or camera needed — this is an audio-only WebRTC call with real-time call UI.
-
-The most important part is:
-- While a call is active (calling, receiving, or in-call), the *entire UI is a white full-screen overlay*.
-- Once the call ends, the app *restores Chat2* for both users.
-
-Please help implement this behavior in React using Socket.IO events and appropriate UI transitions.
-
-
-
-
-
-/**
- * server.js — Final (Camera + Voice Call)
- *
- * Multi-device fix:
- *  callUsers[userName] = [socketId1, socketId2, ...]
- *  When Ammu calls Vishwa, ALL of Vishwa's connected devices get the ring.
- *  Whichever device Vishwa accepts on — that socket handles the WebRTC.
- */
-
-const express    = require("express");
-const http       = require("http");
-const { Server } = require("socket.io");
-
-const app    = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
-});
-
-app.get("/",       (req, res) => res.send("Camera + Call Signaling Server ✅"));
-app.get("/health", (req, res) => res.json({ ok: true }));
-
-// ── Camera room state ──────────────────────────────────────────────────────────
-const rooms = {}; // { roomId: { socketId: userName } }
-
-// ── Call state ─────────────────────────────────────────────────────────────────
-// Multi-device: one user can have multiple sockets (phone + laptop both open)
-const callUsers = {}; // { userName: Set<socketId> }
-
-function addCallUser(user, socketId) {
-  if (!callUsers[user]) callUsers[user] = new Set();
-  callUsers[user].add(socketId);
+interface Chat2Props {
+  nickname: 'Vishwa' | 'Ammu';
+  onLogout: () => void;
+  onSwitchToAIChat: () => void;
+  onSwitchToChat3: () => void;
+  onOpenCoupleMemory?: () => void;
 }
 
-function removeCallUser(user, socketId) {
-  if (callUsers[user]) {
-    callUsers[user].delete(socketId);
-    if (callUsers[user].size === 0) delete callUsers[user];
-  }
-}
+function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCoupleMemory }: Chat2Props) {
+  const handleAIClick = () => {
+    onSwitchToAIChat();
+  };
 
-function getCallSockets(user) {
-  return callUsers[user] ? [...callUsers[user]] : [];
-}
+  const [message, setMessage] = useState('');
+  
+  // 🔥 MEMORY OPTIMIZATION: Use refs to track preview URLs for cleanup
+  const imagePreviewUrlRef = useRef<string | null>(null);
+  const videoPreviewUrlRef = useRef<string | null>(null);
+  const filePreviewUrlRef = useRef<string | null>(null);
+  
+  // State for selected files and previews
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showKissRain, setShowKissRain] = useState(false);
+  const [currentChat, setCurrentChat] = useState('chat2');
+  const [selfTyping, setSelfTyping] = useState(false);
+  const [useBlackText, setUseBlackText] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; text: string; by: string } | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [selectedMessageForDelete, setSelectedMessageForDelete] = useState<string | null>(null);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
+  const [replyToMood, setReplyToMood] = useState<{ emoji: string; partnerNickname: string } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-io.on("connection", (socket) => {
-  console.log("🔌 Connected:", socket.id);
+  // ── Camera sharing state ──────────────────────────────────────────────────
+  const [isCameraSharing, setIsCameraSharing] = useState(false);
 
-  // ── Camera sharing ──────────────────────────────────────────────────────────
-  socket.on("join", ({ room, user }) => {
-    socket.join(room);
-    socket.data.room = room;
-    socket.data.user = user;
-    if (!rooms[room]) rooms[room] = {};
-    rooms[room][socket.id] = user;
-    const count = Object.keys(rooms[room]).length;
-    socket.emit("joined", { room, count });
-    if (count > 1) {
-      Object.entries(rooms[room]).forEach(([sid, name]) => {
-        if (sid !== socket.id && name === "Vishwa") {
-          io.to(sid).emit("request-offer", { to: user });
-        }
-      });
+  const {
+    localStream,
+    remoteStream,
+    status: camSharingStatus,
+    errorMsg: camSharingError,
+    audioEnabled: camAudioEnabled,
+    toggleAudio: camToggleAudio,
+    stop: stopCameraSharing,
+  } = useWebRTCCamera({ nickname, isEnabled: isCameraSharing });
+
+  const handleCameraShareClose = () => {
+    stopCameraSharing();
+    setIsCameraSharing(false);
+  };
+
+  // ── Voice call state ──────────────────────────────────────────────────────
+  const {
+    callStatus,
+    isMicOn,
+    isSpeakerOn,
+    isNearEar,
+    callerName,
+    callDuration,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    toggleMic,
+    toggleSpeaker,
+  } = useVoiceCall(nickname);
+
+  // ── NEW: Screen sharing state ────────────────────────────────────────────────
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  const {
+    localStream:  shareLocalStream,
+    status:       shareStatus,
+    errorMsg:     shareErrorMsg,
+    isSpeakerOn:  shareSpeakerOn,
+    toggleSpeaker: toggleShareSpeaker,
+    stop:         stopScreenShare,
+  } = useScreenShare({ nickname, isEnabled: isScreenSharing });
+
+  // Viewer hook — always active, listens for the OTHER user sharing their screen
+  const {
+    remoteStream: viewerRemoteStream,
+    status:       viewerStatus,
+    sharerName,
+    isSpeakerOn:  viewerSpeakerOn,
+    toggleSpeaker: toggleViewerSpeaker,
+    stopViewing,
+  } = useScreenShareViewer(nickname);
+
+  const handleStartScreenShare = () => {
+    // If about to START sharing (not currently sharing) — check other user is online
+    if (!isScreenSharing) {
+      if (isOtherUserOnline === false) {
+        alert(`${nickname === 'Vishwa' ? 'Ammu' : 'Vishwa'} is offline. Wait for them to come online before screen sharing.`);
+        return;
+      }
     }
-  });
+    setIsScreenSharing(prev => {
+      if (prev) { stopScreenShare(); return false; }
+      return true;
+    });
+  };
 
-  socket.on("camera-ready", ({ room, from })        => socket.to(room).emit("camera-ready", { from }));
-  socket.on("offer",        ({ room, from, sdp })   => socket.to(room).emit("offer",  { from, sdp }));
-  socket.on("answer",       ({ room, from, sdp })   => socket.to(room).emit("answer", { from, sdp }));
-  socket.on("ice",          ({ room, from, candidate }) => socket.to(room).emit("ice", { from, candidate }));
-  socket.on("camera-off",   ({ room, from })        => socket.to(room).emit("camera-off", { from }));
+  const handleScreenShareClose = () => {
+    if (isScreenSharing) {
+      stopScreenShare();
+      setIsScreenSharing(false);
+    } else {
+      stopViewing();
+    }
+  };
 
-  // ── Voice call ──────────────────────────────────────────────────────────────
+  // Auto turn off isScreenSharing flag if browser's native "Stop sharing" bar was used
+  useEffect(() => {
+    if (isScreenSharing && shareStatus === 'idle') {
+      setIsScreenSharing(false);
+    }
+  }, [shareStatus, isScreenSharing]);
+  // ────────────────────────────────────────────────────────────────────────────
 
-  // Register for calls (both devices register)
-  socket.on("call-join", ({ room, user }) => {
-    socket.join(room);
-    socket.data.callUser = user;
-    socket.data.callRoom = room;
-    addCallUser(user, socket.id);
-    const count = getCallSockets(user).length;
-    console.log(`📞 ${user} registered (${count} device(s))`);
-  });
+  // Book icon menu handlers
+  const handleStartCamera = () => {
+    setIsCameraSharing(prev => {
+      if (prev) { stopCameraSharing(); return false; }
+      return true;
+    });
+  };
 
-  // Ammu calls Vishwa — ring ALL of Vishwa's devices
-  socket.on("call-user", ({ room, from, to }) => {
-    const targets = getCallSockets(to);
-    if (targets.length === 0) {
-      socket.emit("call-user-offline");
-      console.log(`📵 ${to} has no devices online`);
+  const handleStartCall = () => {
+    // Check if other user is online before calling
+    if (isOtherUserOnline === false) {
+      alert(`${nickname === 'Vishwa' ? 'Ammu' : 'Vishwa'} is offline. Try again when they're online.`);
       return;
     }
-    console.log(`📞 ${from} → ${to} (${targets.length} device(s))`);
-    targets.forEach(sid => {
-      io.to(sid).emit("call-incoming", { from });
-    });
+    startCall();
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Memory state
+  const [memoryState, setMemoryState] = useState<"closed" | "password" | "open">("closed");
+  const [memoryPassword, setMemoryPassword] = useState("");
+  const [memoryError, setMemoryError] = useState("");
+
+  const {
+    isRecording,
+    recordingTime,
+    audioBlob,
+    audioUrl,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    resetRecording,
+  } = useVoiceRecorder();
+
+  const { isCameraOn, toggleCamera, setCameraOff, isLoading: isCameraStateLoading } = useCameraState(nickname);
+  const handleFaceViolation = () => {
+    console.log('🚨 Face violation detected, redirecting to Chat1...');
+    setCameraOff();
+    onSwitchToAIChat();
+  };
+
+  const { isLoading: isCameraLoading, faceCount } = useFaceDetection({
+    isEnabled: isCameraOn,
+    onViolation: handleFaceViolation,
+    onToggle: setCameraOff
   });
 
-  // Vishwa accepted — tell Ammu (all her devices)
-  socket.on("call-accept", ({ room, from }) => {
-    console.log(`✅ ${from} accepted`);
-    // Cancel ring on Vishwa's OTHER devices
-    const myOtherDevices = getCallSockets(from).filter(sid => sid !== socket.id);
-    myOtherDevices.forEach(sid => io.to(sid).emit("call-cancelled-other-device"));
-    // Tell caller
-    socket.to(room).emit("call-accepted", { from });
+  const { msgs, send, clear, deleteMessage, loading } = useChat('privateMessages', nickname);
+  const { userMood, otherUserMood, setMood, deleteMood } = useMood(nickname);
+  const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
+  useOptimizedActivity(nickname);
+  const otherUserActive = useOtherUserActivity(nickname === 'Vishwa' ? 'Ammu' : 'Vishwa');
+
+  // 🔥 TYPING LISTENER via Socket.IO (instant, zero Firebase cost)
+  const otherUser = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
+  const isOtherUserTyping = useTypingListener(otherUser as 'Vishwa' | 'Ammu');
+
+  // FIX: Only mark messages as seen when tab is active AND memory page is NOT open
+  const isTabActive = useTabVisibility();
+  const isChatActive = isTabActive && memoryState !== "open";
+
+  const { updateFrequentEmojis } = useFrequentEmojis(nickname);
+  const { isReactorActive, handleReactorComplete } = useMoodReactor({
+    userMood,
+    otherUserMood,
+    nickname,
+    selfTyping,
+    lastMessageTimestamp: msgs.length > 0 ? msgs[msgs.length - 1].ts : null
   });
 
-  socket.on("call-reject", ({ room, from }) => {
-    console.log(`❌ ${from} rejected`);
-    socket.to(room).emit("call-rejected", { from });
+  const { pendingHugFrom, isPendingHug } = useHugDetection({
+    messages: msgs,
+    nickname,
+    onHugSuccess: async () => {
+      const partnerName = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
+      const hugMessage = `You and ${partnerName} were hugged 🫂 Have a great chat!`;
+      await send(hugMessage, 'system');
+    }
+  });
+  useAmmeSafetyLogout({
+    nickname,
+    onLogout,
+    isEnabled: true
   });
 
-  socket.on("call-end", ({ room, from }) => {
-    console.log(`📴 ${from} ended call`);
-    socket.to(room).emit("call-ended", { from });
+  const { otherUserLastSeen, isOtherUserOnline, connectionStatus } = useLastSeen({
+    userId: nickname,
+    otherUserId: otherUser
   });
 
-  // WebRTC for voice call
-  socket.on("call-offer",  ({ room, from, sdp })       => socket.to(room).emit("call-offer",  { from, sdp }));
-  socket.on("call-answer", ({ room, from, sdp })       => socket.to(room).emit("call-answer", { from, sdp }));
-  socket.on("call-ice",    ({ room, from, candidate }) => socket.to(room).emit("call-ice",    { from, candidate }));
+  // ── Premium: Love Pulse + Silent Read Signal ──
+  const lovePulseActive = useLovePulse({
+    isOtherUserOnline,
+    isOtherUserTyping,
+    hasMessages: msgs.length > 0,
+  });
+  const { silentReadActive, targetMessageId } = useSilentReadSignal({
+    messages: msgs,
+    nickname,
+    otherUser: otherUser as 'Vishwa' | 'Ammu',
+  });
 
-  // ── Disconnect ──────────────────────────────────────────────────────────────
-  socket.on("disconnect", () => {
-    const { room, user, callUser, callRoom } = socket.data;
+  // Pass the corrected chat active state to useMessageSeen
+  const { socket } = useMessageSeen({
+    nickname,
+    messages: msgs,
+    isTabActive: isChatActive // FIX: Use isChatActive instead of isTabActive
+  });
 
-    // Camera cleanup
-    if (room && rooms[room]) {
-      delete rooms[room][socket.id];
-      if (Object.keys(rooms[room]).length === 0) delete rooms[room];
-      else socket.to(room).emit("camera-off", { from: user });
+  // 🔥 MEMORY CLEANUP: Cleanup all preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup all blob URLs when component unmounts
+      if (imagePreviewUrlRef.current) {
+        revokePreviewUrl(imagePreviewUrlRef.current);
+      }
+      if (videoPreviewUrlRef.current) {
+        revokePreviewUrl(videoPreviewUrlRef.current);
+      }
+      if (filePreviewUrlRef.current) {
+        revokePreviewUrl(filePreviewUrlRef.current);
+      }
+    };
+  }, []);
+
+//// TV device exit method 
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Only trigger if user is NOT typing in a text field
+    const tag = (e.target as HTMLElement).tagName;
+    if (e.key === '1' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      onLogout();
+    }
+  };
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [onLogout]);
+  // Memory functions
+  const handleOpenMemory = () => {
+    setMemoryPassword("");
+    setMemoryError("");
+    setMemoryState("password");
+  };
+
+  const handleVerifyMemoryPassword = () => {
+    const correct =
+      (nickname === "Vishwa" && memoryPassword === "2004") ||
+      (nickname === "Ammu" && memoryPassword === "2006");
+
+    if (correct) {
+      setMemoryError("");
+      setMemoryState("open");
+    } else {
+      setMemoryError("Wrong password");
+    }
+  };
+
+  useEffect(() => {
+    const setChatContext = async () => {
+      try {
+        await setDoc(doc(lastSeenDb, 'userContext', nickname), {
+          currentChat: 'chat2',
+          timestamp: serverTimestamp(),
+          userId: nickname
+        });
+      } catch (error) {
+        console.error('Error setting chat context:', error);
+      }
+    };
+    setChatContext();
+  }, [nickname]);
+
+  useEffect(() => {
+    return () => {
+      if (isCameraOn) {
+        console.log('🚪 Exiting Chat2, turning off camera...');
+        setCameraOff();
+      }
+      // Also stop camera sharing on unmount
+      if (isCameraSharing) {
+        stopCameraSharing();
+      }
+      // Also stop screen sharing on unmount
+      if (isScreenSharing) {
+        stopScreenShare();
+      }
+    };
+  }, [isCameraOn, setCameraOff, isCameraSharing, stopCameraSharing, isScreenSharing, stopScreenShare]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+
+  const spacingMap = useMemo(() => {
+    return calculateSpacingForAllMessages(msgs);
+  }, [msgs]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollButton(!isAtBottom && msgs.length > 0);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [msgs.length]);
+
+  // NOTE: Typing listener now uses Socket.IO (useTypingListener above)
+  // Old Firestore-based listener removed for zero Firebase cost and instant delivery
+
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [msgs]);
+
+  useEffect(() => {
+    if (!selfTyping) return;
+    const t = setTimeout(() => setSelfTyping(false), 3000);
+    return () => clearTimeout(t);
+  }, [selfTyping]);
+
+  // 🔐 SECRET LOGOUT: Ctrl + Windows key → redirect to login
+  useEffect(() => {
+    const handleSecretLogout = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.metaKey) {
+        e.preventDefault();
+        onLogout();
+      }
+    };
+    window.addEventListener('keydown', handleSecretLogout);
+    return () => window.removeEventListener('keydown', handleSecretLogout);
+  }, [onLogout]);
+
+  // ===============================================
+// 🔥 FRONTEND NOTIFICATION ENGINE — FIXED
+// ===============================================
+
+const messageQueueRef = useRef<string[]>([]);
+const isProcessingRef = useRef(false);
+// Ref keeps the latest isOtherUserOnline for async queue functions (stale closure prevention)
+const isOtherUserOnlineRef = useRef(false);
+useEffect(() => { isOtherUserOnlineRef.current = isOtherUserOnline; }, [isOtherUserOnline]);
+
+const sendMessageNotification = async (messageText: string) => {
+  // Only Ammu sends notifications to Vishwa
+  if (nickname !== "Ammu") return;
+
+  const safeMessage = (messageText ?? "").trim();
+  if (!safeMessage) {
+    console.log("⚠️ Empty notification text — skipped");
+    return;
+  }
+
+  // If Vishwa is confirmed online right now → skip entirely, no need to notify
+  if (isOtherUserOnlineRef.current === true) {
+    console.log("🟢 Vishwa is online — notification skipped");
+    return;
+  }
+
+  // Queue the message and start processing
+  messageQueueRef.current.push(safeMessage);
+  console.log("📦 Queued:", safeMessage, "| Queue size:", messageQueueRef.current.length);
+
+  if (!isProcessingRef.current) {
+    processNotificationQueue();
+  }
+};
+
+// ── Replace your processQueue function with this ─────────────────────────────
+const processNotificationQueue = async () => {
+  if (isProcessingRef.current) return;
+  isProcessingRef.current = true;
+
+  while (messageQueueRef.current.length > 0) {
+    const nextMessage = messageQueueRef.current[0]?.trim();
+
+    // Skip empty entries
+    if (!nextMessage) {
+      messageQueueRef.current.shift();
+      continue;
     }
 
-    // Call cleanup
-    if (callUser) {
-      removeCallUser(callUser, socket.id);
-      const remaining = getCallSockets(callUser).length;
-      console.log(`🔌 ${callUser} disconnected (${remaining} device(s) left)`);
-      if (remaining === 0 && callRoom) {
-        socket.to(callRoom).emit("call-ended", { from: callUser });
+    // If Vishwa came online while we were processing → clear queue, stop
+    if (isOtherUserOnlineRef.current === true) {
+      console.log("🟢 Vishwa came online — clearing notification queue");
+      messageQueueRef.current = [];
+      break;
+    }
+
+    // Attempt to send with up to 3 retries
+    let sent = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: nextMessage }),
+        });
+
+        // Accept both success:true and queued:true as "delivered to backend"
+        let data: any = { success: false };
+        try { data = await res.json(); } catch {}
+
+        if (data.success || data.queued) {
+          console.log(`📨 Sent to backend (attempt ${attempt}):`, nextMessage);
+          sent = true;
+          break;
+        } else {
+          console.warn(`⚠️ Backend returned unexpected response:`, data);
+          sent = true; // treat as sent to avoid infinite retry
+          break;
+        }
+      } catch (err) {
+        console.log(`⚠️ Network error (attempt ${attempt}/3):`, err);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 2000 * attempt)); // 2s, 4s
+        }
       }
     }
 
-    console.log(`🔌 Disconnected: ${socket.id}`);
-  });
-});
+    // Remove from queue whether sent or not (backend has its own retry queue)
+    messageQueueRef.current.shift();
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
+    if (!sent) {
+      console.log("❌ Failed after 3 attempts — backend will retry:", nextMessage);
+    }
+
+    // Small gap between messages
+    if (messageQueueRef.current.length > 0) {
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+
+  isProcessingRef.current = false;
+};
+
+  const handleReply = (messageId: string, text: string) => {
+    const message = msgs.find(msg => msg.id === messageId);
+    if (message) {
+      setReplyTo({
+        id: messageId,
+        text: text,
+        by: message.by
+      });
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      await deleteMessage(messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      alert('Failed to delete message. Please try again.');
+    }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowScrollButton(false);
+  };
+
+  const isMobile = () => {
+    return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  };
+
+  const handleEmojiButtonClick = () => {
+    if (!isMobile()) {
+      setShowEmojiPicker(!showEmojiPicker);
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    const textarea = textareaRef.current;
+
+    if (textarea) {
+      const start = textarea.selectionStart || 0;
+      const end = textarea.selectionEnd || 0;
+      const currentMessage = message;
+      const newMessage = currentMessage.slice(0, start) + emoji + currentMessage.slice(end);
+
+      setMessage(newMessage);
+
+      setTimeout(() => {
+        const newCursorPosition = start + emoji.length;
+        textarea.setSelectionRange(newCursorPosition, newCursorPosition);
+        textarea.focus();
+      }, 0);
+    } else {
+      setMessage(prev => prev + emoji);
+    }
+  };
+
+  const handleEmojiInsert = (emoji: string) => {
+    handleEmojiSelect(emoji);
+  };
+
+  const extractEmojisFromText = (text: string): string[] => {
+    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    return text.match(emojiRegex) || [];
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedImage) {
+      await handleSendImage();
+    } else if (selectedVideo) {
+      await handleSendVideo();
+    } else if (selectedFile) {
+      await handleSendFile();
+    } else if (message.trim()) {
+      const textToSend = message.trim();
+      setMessage('');
+      setReplyTo(null);
+      setReplyToMood(null);
+      setSelfTyping(false);
+      stopTyping();
+
+      let finalTextToSend = textToSend;
+      if (nickname !== 'Vishwa' && nickname !== 'Ammu') {
+        finalTextToSend = `🤖 ${textToSend}`;
+      }
+
+      const moodMetadata = replyToMood ? {
+        moodEmoji: replyToMood.emoji,
+        moodOwnerUserId: replyToMood.partnerNickname === 'Vishwa' ? 'Vishwa' : 'Ammu',
+        moodSetAt: new Date(),
+        isReplyToMood: true
+      } : undefined;
+
+      try {
+        await send(finalTextToSend, 'text', undefined, undefined, moodMetadata, replyTo);
+        await sendMessageNotification(finalTextToSend);
+
+        const emojisInMessage = extractEmojisFromText(finalTextToSend);
+        if (emojisInMessage.length > 0) {
+          updateFrequentEmojis(emojisInMessage);
+        }
+      } catch (error) {
+        console.error('Failed to send message:', error);
+      } finally {
+        textareaRef.current?.focus();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (msgs.length > 0) {
+      const latestMessage = msgs[msgs.length - 1];
+      if (latestMessage.text?.includes('😘') && latestMessage.by === 'Vishwa' && nickname === 'Ammu') {
+        setShowKissRain(true);
+      }
+    }
+  }, [msgs, nickname]);
+
+  const handleImageSelect = useCallback((file: File, previewUrl: string) => {
+    // Clean up any existing preview URL
+    if (imagePreviewUrlRef.current && imagePreviewUrlRef.current !== previewUrl) {
+      revokePreviewUrl(imagePreviewUrlRef.current);
+    }
+    
+    // Store the new preview URL
+    imagePreviewUrlRef.current = previewUrl;
+    
+    setSelectedImage(file);
+    setImagePreview(previewUrl);
+  }, []);
+
+  const handleSendImage = async () => {
+    if (selectedImage && !isUploading) {
+      setIsUploading(true);
+      try {
+        const timestamp = Date.now();
+        const fileName = `${nickname}_${timestamp}_${selectedImage.name}`;
+
+        const imageUrl = await uploadImageToSupabase(selectedImage, fileName);
+
+        await send('', 'image', imageUrl, fileName, undefined, replyTo);
+
+        // Add to coupleHotMemory collection
+        await addDoc(collection(db, "coupleHotMemory"), {
+          imageUrl: imageUrl,
+          isHot: false,
+          createdAt: serverTimestamp(),
+        });
+
+        await sendMessageNotification(`📷 ${nickname} sent a photo`);
+
+        // 🔥 CLEANUP: Clear image state and revoke preview URL
+        setSelectedImage(null);
+        if (imagePreviewUrlRef.current) {
+          revokePreviewUrl(imagePreviewUrlRef.current);
+          imagePreviewUrlRef.current = null;
+        }
+        setImagePreview(null);
+        setReplyTo(null);
+      } catch (error) {
+        console.error('Image upload failed:', error);
+        alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleCancelImage = () => {
+    // 🔥 CLEANUP: Revoke preview URL when cancelling
+    if (imagePreviewUrlRef.current) {
+      revokePreviewUrl(imagePreviewUrlRef.current);
+      imagePreviewUrlRef.current = null;
+    }
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  const handleVideoSelect = useCallback((file: File, previewUrl: string) => {
+    // Clean up any existing preview URL
+    if (videoPreviewUrlRef.current && videoPreviewUrlRef.current !== previewUrl) {
+      revokePreviewUrl(videoPreviewUrlRef.current);
+    }
+    
+    videoPreviewUrlRef.current = previewUrl;
+    setSelectedVideo(file);
+    setVideoPreview(previewUrl);
+  }, []);
+
+  const handleSendVideo = async () => {
+    if (selectedVideo && !isUploading) {
+      setIsUploading(true);
+      try {
+        const timestamp = Date.now();
+        const fileName = `${nickname}_${timestamp}_${selectedVideo.name}`;
+
+        const videoUrl = await uploadVideoToSupabase(selectedVideo, fileName);
+
+        await send('', 'video', undefined, fileName, undefined, replyTo, videoUrl);
+        await sendMessageNotification(`🎥 ${nickname} sent a video`);
+
+        // 🔥 CLEANUP
+        setSelectedVideo(null);
+        if (videoPreviewUrlRef.current) {
+          revokePreviewUrl(videoPreviewUrlRef.current);
+          videoPreviewUrlRef.current = null;
+        }
+        setVideoPreview(null);
+        setReplyTo(null);
+      } catch (error) {
+        console.error('Video upload failed:', error);
+        alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleCancelVideo = () => {
+    // 🔥 CLEANUP
+    if (videoPreviewUrlRef.current) {
+      revokePreviewUrl(videoPreviewUrlRef.current);
+      videoPreviewUrlRef.current = null;
+    }
+    setSelectedVideo(null);
+    setVideoPreview(null);
+  };
+
+  const handleFileSelect = useCallback((file: File, previewUrl: string) => {
+    setSelectedFile(file);
+    setFilePreview(previewUrl || file.name); // Use filename if no preview
+  }, []);
+
+  const handleSendFile = async () => {
+    if (selectedFile && !isUploading) {
+      setIsUploading(true);
+      try {
+        const timestamp = Date.now();
+        const fileName = `${nickname}_${timestamp}_${selectedFile.name}`;
+
+        const fileUrl = await uploadFileToSupabase(selectedFile, fileName);
+
+        await send('', 'file', undefined, selectedFile.name, undefined, replyTo, undefined, fileUrl, selectedFile.type);
+        await sendMessageNotification(`📄 ${nickname} sent a file: ${selectedFile.name}`);
+
+        setSelectedFile(null);
+        setFilePreview(null);
+        setReplyTo(null);
+      } catch (error) {
+        console.error('File upload failed:', error);
+        alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleCancelFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+  };
+
+  const handleCancelReply = () => {
+    setReplyTo(null);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setMessage(value);
+    const active = !!value.trim();
+    setSelfTyping(active);
+
+    if (active) {
+      handleTyping();
+    } else {
+      stopTyping();
+    }
+  };
+
+  const getPlaceholderText = () => {
+    if (replyToMood) {
+      return `Reply to ${replyToMood.partnerNickname}'s mood...`;
+    }
+    return "Enter message...";
+  };
+
+  const handleClearOrDelete = async () => {
+    if (selectedMessageForDelete) {
+      deleteMessage(selectedMessageForDelete);
+      setSelectedMessageForDelete(null);
+      return;
+    }
+
+    const skip = (window as any).__AMMU_SKIP_LOGOUT__;
+    skip?.start();
+
+    const userConfirmed = window.confirm(
+      `Are you sure ${nickname} wants to delete all messages?`
+    );
+
+    setTimeout(() => {
+      skip?.stop();
+    }, 800);
+
+    if (userConfirmed) {
+      try {
+        await clear();
+      } catch (e) {
+        alert('Failed to delete messages. Please try again.');
+        console.error('Clear failed:', e);
+      }
+    }
+  };
+
+  // 🔥 FIXED: Proper timestamp validation with try-catch and fallback
+  const formatMessageTime = (timestamp: any): string => {
+    try {
+      // Validate timestamp exists
+      if (!timestamp) {
+        console.warn('⚠️ Empty timestamp received');
+        return '';
+      }
+
+      // Convert Firestore timestamp or Date to Date object
+      let messageDate: Date;
+      
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        messageDate = timestamp.toDate();
+      } else if (timestamp instanceof Date) {
+        messageDate = timestamp;
+      } else if (typeof timestamp === 'number') {
+        messageDate = new Date(timestamp);
+      } else {
+        messageDate = new Date(timestamp);
+      }
+
+      // Validate the date is valid
+      if (isNaN(messageDate.getTime())) {
+        console.warn('⚠️ Invalid timestamp:', timestamp);
+        return 'Invalid time';
+      }
+
+      const TZ = 'Asia/Kolkata';
+      const dayFmt = new Intl.DateTimeFormat('en-IN', { 
+        timeZone: TZ, 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      });
+
+      // Check if message is from today
+      const isToday = dayFmt.format(messageDate) === dayFmt.format(new Date());
+
+      if (isToday) {
+        return new Intl.DateTimeFormat('en-US', { 
+          timeZone: TZ, 
+          hour: 'numeric', 
+          minute: '2-digit', 
+          hour12: true 
+        }).format(messageDate);
+      }
+
+      return new Intl.DateTimeFormat('en-US', { 
+        timeZone: TZ, 
+        day: 'numeric', 
+        month: 'short', 
+        hour: 'numeric', 
+        minute: '2-digit', 
+        hour12: true 
+      }).format(messageDate);
+    } catch (error) {
+      console.error('❌ Error formatting timestamp:', error, 'Timestamp:', timestamp);
+      return 'Unknown time';
+    }
+  };
+
+  const micVisible = (!message.trim() && !selectedImage && !selectedVideo && !selectedFile) || isRecording;
+
+  const handleSendVoiceMessage = async (voiceBlob: Blob) => {
+    if (isUploading) return;
+    setIsUploading(true);
+    try {
+      const timestamp = Date.now();
+      const fileName = `${nickname}_${timestamp}_voice.webm`;
+      const voiceFile = new File([voiceBlob], fileName, { type: 'audio/webm' });
+
+      const fileUrl = await uploadFileToSupabase(voiceFile, fileName);
+
+      await send('', 'file', undefined, fileName, undefined, replyTo, undefined, fileUrl, 'audio/webm');
+      await sendMessageNotification(`🎤 ${nickname} sent a voice message`);
+
+      resetRecording();
+      setReplyTo(null);
+    } catch (error) {
+      console.error('Voice upload failed:', error);
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="h-full w-full bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
+      <KissEmojiRain show={showKissRain} onComplete={() => setShowKissRain(false)} />
+      <MoodReactor isActive={isReactorActive} onComplete={handleReactorComplete} />
+
+      {/* ── INLINE VOICE CALL UI ── */}
+
+      {/* CALLER: small 52px green bar at top — chat still fully visible */}
+      {callStatus === "calling" && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, height:52,
+          zIndex:9999, background:"linear-gradient(90deg,#10b981,#059669)",
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"0 16px", boxShadow:"0 2px 12px rgba(16,185,129,0.4)",
+        }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ color:"#fff", fontWeight:700, fontSize:14 }}>
+              📞 Calling {nickname === "Vishwa" ? "Ammu" : "Vishwa"}…
+            </span>
+          </div>
+          <button onClick={endCall} style={{
+            background:"rgba(255,255,255,0.25)", border:"none",
+            borderRadius:20, padding:"6px 16px",
+            color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer",
+          }}>Cancel</button>
+        </div>
+      )}
+
+      {/* PROXIMITY SENSOR: pure black screen when phone near ear */}
+      {isNearEar && (callStatus === "connected" || callStatus === "connecting") && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#000" }}/>
+      )}
+
+      {/* INCOMING CALL: full white screen with accept/reject */}
+      {callStatus === "incoming" && !isNearEar && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", fontFamily:"system-ui" }}>
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
+            <div style={{ width:96, height:96, borderRadius:"50%", background:"linear-gradient(135deg,#10b981,#059669)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:38, fontWeight:800, color:"#fff", boxShadow:"0 8px 32px rgba(16,185,129,0.3)" }}>
+              {(callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")).charAt(0).toUpperCase()}
+            </div>
+            <h2 style={{ fontSize:26, fontWeight:700, color:"#111827", margin:0 }}>{callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")}</h2>
+            <p style={{ fontSize:15, color:"#6b7280", margin:0 }}>Incoming voice call…</p>
+          </div>
+          <div style={{ display:"flex", gap:60, paddingBottom:56 }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <button onClick={rejectCall} style={{ width:72, height:72, borderRadius:"50%", border:"none", background:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(239,68,68,0.4)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.32 9.9"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>Decline</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <button onClick={acceptCall} style={{ width:72, height:72, borderRadius:"50%", border:"none", background:"#22c55e", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(34,197,94,0.4)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 15.1 19.79 19.79 0 0 1 1.62 6.53A2 2 0 0 1 3.59 4.34h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 12.1a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 18.92z"/></svg>
+              </button>
+              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>Accept</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONNECTING: full white screen with spinner */}
+      {callStatus === "connecting" && !isNearEar && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", fontFamily:"system-ui" }}>
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:14 }}>
+            <div style={{ width:88, height:88, borderRadius:"50%", background:"linear-gradient(135deg,#10b981,#059669)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, fontWeight:800, color:"#fff" }}>
+              {(callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")).charAt(0).toUpperCase()}
+            </div>
+            <h2 style={{ fontSize:26, fontWeight:700, color:"#111827", margin:0 }}>{callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")}</h2>
+            <p style={{ fontSize:15, color:"#6b7280", margin:0 }}>Connecting…</p>
+          </div>
+          <div style={{ paddingBottom:56 }}>
+            <button onClick={endCall} style={{ width:64, height:64, borderRadius:"50%", border:"none", background:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(239,68,68,0.3)" }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.32 9.9"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CONNECTED: full white screen with controls */}
+      {callStatus === "connected" && !isNearEar && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", fontFamily:"system-ui" }}>
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12 }}>
+            <div style={{ width:88, height:88, borderRadius:"50%", background:"linear-gradient(135deg,#10b981,#059669)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, fontWeight:800, color:"#fff", boxShadow:"0 4px 24px rgba(16,185,129,0.3)" }}>
+              {(callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")).charAt(0).toUpperCase()}
+            </div>
+            <h2 style={{ fontSize:26, fontWeight:700, color:"#111827", margin:0 }}>{callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")}</h2>
+            <span style={{ fontSize:20, color:"#6b7280", fontWeight:500, letterSpacing:3 }}>
+              {String(Math.floor(callDuration/60)).padStart(2,"0")}:{String(callDuration%60).padStart(2,"0")}
+            </span>
+            <span style={{ fontSize:12, color: isSpeakerOn?"#10b981":"#9ca3af", fontWeight:500 }}>
+              {isSpeakerOn ? "🔊 Loudspeaker" : "🔇 Earpiece"}
+            </span>
+          </div>
+          <div style={{ display:"flex", gap:28, paddingBottom:60, alignItems:"center" }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <button onClick={toggleMic} style={{ width:58, height:58, borderRadius:"50%", border:"none", background:isMicOn?"#f3f4f6":"#1f2937", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 14px rgba(0,0,0,0.1)" }}>
+                {isMicOn
+                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                  : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                }
+              </button>
+              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>{isMicOn?"Mute":"Unmute"}</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <button onClick={endCall} style={{ width:72, height:72, borderRadius:"50%", border:"none", background:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 20px rgba(239,68,68,0.4)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.32 9.9"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>End</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <button onClick={toggleSpeaker} style={{ width:58, height:58, borderRadius:"50%", border:"none", background:isSpeakerOn?"#10b981":"#f3f4f6", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 14px rgba(0,0,0,0.1)" }}>
+                {isSpeakerOn
+                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                }
+              </button>
+              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>{isSpeakerOn?"Speaker":"Earpiece"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BUSY: small toast at top — user offline, no white screen */}
+      {callStatus === "busy" && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, height:52,
+          zIndex:9999, background:"linear-gradient(90deg,#ef4444,#dc2626)",
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"0 16px", boxShadow:"0 2px 12px rgba(239,68,68,0.4)",
+        }}>
+          <span style={{ color:"#fff", fontWeight:700, fontSize:14 }}>
+            📵 {callerName ?? (nickname === "Vishwa" ? "Ammu" : "Vishwa")} is offline
+          </span>
+          <button onClick={endCall} style={{
+            background:"rgba(255,255,255,0.25)", border:"none",
+            borderRadius:20, padding:"6px 14px",
+            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer",
+          }}>OK</button>
+        </div>
+      )}
+
+      {/* ENDED: small toast at top — call ended, no white screen */}
+      {callStatus === "ended" && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, height:52,
+          zIndex:9999, background:"linear-gradient(90deg,#6b7280,#4b5563)",
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"0 16px", boxShadow:"0 2px 12px rgba(0,0,0,0.2)",
+        }}>
+          <span style={{ color:"#fff", fontWeight:700, fontSize:14 }}>
+            📴 Call ended {callDuration > 0 ? `· ${String(Math.floor(callDuration/60)).padStart(2,"0")}:${String(callDuration%60).padStart(2,"0")}` : ""}
+          </span>
+          <button onClick={endCall} style={{
+            background:"rgba(255,255,255,0.25)", border:"none",
+            borderRadius:20, padding:"6px 14px",
+            color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer",
+          }}>OK</button>
+        </div>
+      )}
+
+      {isCameraOn && (
+        <CameraButton
+          isCameraOn={isCameraOn}
+          toggleCamera={toggleCamera}
+          isLoading={isCameraLoading}
+          faceCount={faceCount}
+        />
+      )}
+
+      {/* ── Camera sharing overlay (WebRTC floating window) ── */}
+      <CameraShareOverlay
+        localStream={localStream}
+        remoteStream={remoteStream}
+        status={camSharingStatus}
+        errorMsg={camSharingError}
+        nickname={nickname}
+        isEnabled={isCameraSharing}
+        audioEnabled={camAudioEnabled}
+        onToggleAudio={camToggleAudio}
+        onClose={handleCameraShareClose}
+      />
+
+      {/* ── NEW: Screen share overlay — shows for BOTH sharer (own preview) and viewer (received) ── */}
+      {(isScreenSharing || viewerRemoteStream) && (
+        <ScreenShareOverlay
+          remoteStream={viewerRemoteStream}
+          localStream={shareLocalStream}
+          status={isScreenSharing ? shareStatus : viewerStatus}
+          errorMsg={shareErrorMsg}
+          nickname={nickname}
+          sharerName={sharerName}
+          isSharing={isScreenSharing}
+          isSpeakerOn={isScreenSharing ? shareSpeakerOn : viewerSpeakerOn}
+          onToggleSpeaker={isScreenSharing ? toggleShareSpeaker : toggleViewerSpeaker}
+          onClose={handleScreenShareClose}
+        />
+      )}
+
+      {/* Screen share not supported on this device (mobile browsers) */}
+      {shareStatus === 'unsupported' && isScreenSharing && (
+        <div style={{
+          position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)",
+          zIndex: 9999, maxWidth: "90vw", width: 340,
+          background: "#fff", borderRadius: 16, padding: "16px 20px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.2)", border: "1px solid #fca5a5",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>🖥️🚫</div>
+          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 12px", lineHeight: 1.5 }}>
+            {shareErrorMsg}
+          </p>
+          <button
+            onClick={() => setIsScreenSharing(false)}
+            style={{
+              background: "#ef4444", color: "#fff", border: "none",
+              borderRadius: 10, padding: "8px 20px", fontSize: 13, fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            OK
+          </button>
+        </div>
+      )}
+
+<style jsx>{`
+  @keyframes swing {
+    0%, 100% {
+      transform: rotate(-4deg);
+    }
+    50% {
+      transform: rotate(4deg);
+    }
+  }
+`}</style>
+
+      <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-green-50/95 via-blue-50/95 to-purple-50/95 backdrop-blur-md px-4 py-4 z-50 shadow-lg border-b border-white/30">
+        {/* ⭐ MEMORY STAR - Responsive & Always Visible */}
+<div className="fixed right-4 sm:right-8 top-20 sm:top-24 z-[60] pointer-events-none">
+  <button
+    onClick={handleOpenMemory}
+    className="relative bg-yellow-100 text-yellow-600 hover:bg-yellow-200 transition-all duration-300 shadow-lg hover:shadow-xl rounded-full p-2 sm:p-3 pointer-events-auto"
+    title="Open Memories"
+    style={{
+      animation: 'swing 4s ease-in-out infinite'
+    }}
+  >
+    <span className="text-lg sm:text-xl">⭐</span>
+
+    {/* Spark */}
+    <span className="absolute -top-1 -right-1 animate-ping text-yellow-400 text-xs">
+      ✨
+    </span>
+  </button>
+</div>
+
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+              {/* ── Book icon → popup menu with Call + Camera + Screen Share options ── */}
+              <LovePulse active={lovePulseActive} size={44}>
+                <BookIconMenu
+                  isCameraSharing={isCameraSharing}
+                  isInCall={callStatus !== "idle"}
+                  isScreenSharing={isScreenSharing}
+                  onStartCamera={handleStartCamera}
+                  onStartCall={handleStartCall}
+                  onStartScreenShare={handleStartScreenShare}
+                />
+              </LovePulse>
+
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent truncate">
+                  AI Teacher
+                </h1>
+                <PresenceIndicator
+                  isOnline={isOtherUserOnline}
+                  lastSeen={otherUserLastSeen}
+                  connectionStatus={connectionStatus}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="hidden sm:block flex-shrink-0">
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={onSwitchToChat3}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                >
+                  Moods
+                </button>
+                <MoodDisplay
+                  userMood={userMood}
+                  otherUserMood={otherUserMood}
+                  nickname={nickname}
+                  onOpenPicker={() => setShowMoodPicker(true)}
+                  onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-2 flex-shrink-0">
+              <button
+                onClick={handleAIClick}
+                className="px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                title="Switch to AI Chat"
+              >
+                AI
+              </button>
+
+              <button
+                onClick={() => setUseBlackText(prev => !prev)}
+                className={`px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold transition-colors ${
+                  useBlackText
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Toggle text color"
+              >
+                T
+              </button>
+              <button
+                onClick={handleClearOrDelete}
+                className={`px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold transition-colors ${
+                  selectedMessageForDelete
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-200'
+                }`}
+                title={selectedMessageForDelete ? "Delete selected message" : "Clear all messages"}
+              >
+                🗑️
+              </button>
+
+              <button
+                onClick={onLogout}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden md:inline">Exit</span>
+              </button>
+
+              <button
+                onClick={onLogout}
+                className="sm:hidden flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                title="Exit"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Exit</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Moods */}
+      <div className="sm:hidden fixed top-14 left-0 right-0 z-40 flex justify-center px-2 pt-2">
+        <div className="flex flex-col items-center gap-1 bg-transparent rounded-b-3xl px-6 py-3">
+          <button
+            onClick={onSwitchToChat3}
+            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+          >
+            Moods
+          </button>
+          
+          <MoodDisplay
+            userMood={userMood}
+            otherUserMood={otherUserMood}
+            nickname={nickname}
+            onOpenPicker={() => setShowMoodPicker(true)}
+            onReplyToMood={(emoji, partner) =>
+              setReplyToMood({ emoji, partnerNickname: partner })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
+        <div className="text-9xl opacity-10 text-gray-500">📚</div>
+      </div>
+
+      <div
+        ref={messagesContainerRef}
+        className="pt-20 sm:pt-20 pb-32 max-w-4xl mx-auto p-4 relative z-10 h-screen overflow-y-auto"
+        style={{ paddingTop: window.innerWidth < 640 ? '160px' : '80px' }}
+      >
+        {loading && (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">📚</div>
+            <p className="text-gray-500">Loading messages...</p>
+          </div>
+        )}
+        <div className="space-y-2">
+          {msgs.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📚💬</div>
+              <p className="text-gray-500 italic">Start your study discussion here...</p>
+            </div>
+          ) : (
+            msgs.map((msg: any, idx: number) => {
+              const isOwn = msg.by === nickname;
+              const isAudio =
+                (msg.mimeType && msg.mimeType.startsWith('audio/')) ||
+                (msg.fileUrl && /\.(webm|mp3|m4a|ogg|wav)$/i.test(msg.fileUrl)) ||
+                (msg.fileName && /\.(webm|mp3|m4a|ogg|wav)$/i.test(msg.fileName)) ||
+                msg.type === 'audio';
+
+              const hasSpacing = spacingMap[msg.id] || false;
+
+              if (isAudio && (msg.fileUrl || msg.audioUrl)) {
+                const src = msg.audioUrl || msg.fileUrl;
+                return (
+                  <RobotCloud
+                    key={msg.id}
+                    messageId={msg.id}
+                    text=""
+                    audioUrl={src}
+                    isOwn={isOwn}
+                    isUser={isOwn}
+                    isAI={msg.by !== nickname && (msg.text?.startsWith('🤖') || msg.by === 'AI')}
+                    type="voice"
+                    currentUserNickname={nickname}
+                    timestamp={formatMessageTime(msg.ts)}
+                    useBlackText={useBlackText}
+                    onReply={handleReply}
+                    onDelete={handleDeleteMessage}
+                    replyTo={msg.replyTo}
+                    msg={msg}
+                    hasSpacing={hasSpacing}
+                    silentReadActive={silentReadActive && targetMessageId === msg.id}
+                  />
+                );
+              }
+
+              return (
+                <RobotCloud
+                  key={msg.id}
+                  messageId={msg.id}
+                  text={msg.text}
+                  imageUrl={msg.imageUrl}
+                  videoUrl={msg.videoUrl}
+                  fileUrl={msg.fileUrl}
+                  fileName={msg.fileName}
+                  mimeType={msg.mimeType}
+                  isOwn={isOwn}
+                  isUser={isOwn}
+                  isAI={msg.by !== nickname && (msg.text?.startsWith('🤖') || msg.by === 'AI')}
+                  type={msg.type}
+                  currentUserNickname={nickname}
+                  timestamp={formatMessageTime(msg.ts)}
+                  useBlackText={useBlackText}
+                  onReply={handleReply}
+                  onDelete={handleDeleteMessage}
+                  replyTo={msg.replyTo}
+                  msg={msg}
+                  hasSpacing={hasSpacing}
+                  silentReadActive={silentReadActive && targetMessageId === msg.id}
+                />
+              );
+            })
+          )}
+          {isOtherUserTyping && (
+            <TypingIndicator nickname={otherUser} currentUserNickname={nickname} />
+          )}
+          <div ref={messagesEndRef} />
+          <div className="h-24"></div>
+        </div>
+      </div>
+
+      {showScrollButton && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-32 right-6 mb-4 bg-green-500 text-white p-3 rounded-full shadow-lg hover:bg-green-600 transition-all z-40"
+          title="Scroll to latest message"
+        >
+          💉
+        </button>
+      )}
+
+      {imagePreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-4 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-800">Send Image</h3>
+              <button onClick={handleCancelImage} className="p-1 hover:bg-gray-100 rounded-full">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <img src={imagePreview} alt="Preview" className="w-full h-auto rounded-xl mb-4 max-h-64 object-cover" />
+            <div className="flex gap-3">
+              <button onClick={handleCancelImage} className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleSendImage} disabled={isUploading} className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                {isUploading ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <VideoPreviewModal
+        videoFile={selectedVideo}
+        videoPreview={videoPreview}
+        isOpen={!!videoPreview}
+        onClose={handleCancelVideo}
+        onSend={handleSendVideo}
+        isUploading={isUploading}
+      />
+
+      <FilePreviewModal
+        file={selectedFile}
+        filePreview={filePreview}
+        isOpen={!!filePreview}
+        onClose={handleCancelFile}
+        onSend={handleSendFile}
+        isUploading={isUploading}
+      />
+
+      {audioUrl && audioBlob && !isRecording && (
+        <VoiceMessagePreview
+          audioUrl={audioUrl}
+          audioBlob={audioBlob}
+          onSend={handleSendVoiceMessage}
+          onDelete={resetRecording}
+        />
+      )}
+
+      <div className="fixed bottom-0 left-0 right-0 bg-transparent p-4 z-50 ">
+        {replyToMood && (
+          <ReplyToMoodPill
+            emoji={replyToMood.emoji}
+            partnerNickname={replyToMood.partnerNickname}
+            onCancel={() => setReplyToMood(null)}
+          />
+        )}
+
+        {replyTo && (
+          <div className="bg-blue-100 p-2 mb-1 rounded relative text-sm text-gray-800">
+            <span className="font-bold text-blue-800">Replying to AI </span>
+            <div className="truncate max-w-xs">
+              {replyTo.text.split(' ').slice(0, 5).join(' ')}
+              {replyTo.text.split(' ').length > 8 && '...'}
+            </div>
+            <button
+              className="absolute top-1 left-1/2 transform -translate-x-1/2 text-gray-500 hover:text-gray-700"
+              onClick={() => setReplyTo(null)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+          <div className="flex gap-3 items-end">
+            <InstagramPlusButton
+              onImageSelect={handleImageSelect}
+              onVideoSelect={handleVideoSelect}
+              onFileSelect={handleFileSelect}
+              theme="chat2"
+            />
+
+            {!isMobile() && (
+              <div className="relative">
+                <button
+                  ref={emojiButtonRef}
+                  type="button"
+                  onClick={handleEmojiButtonClick}
+                  className={`p-3 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl ${
+                    showEmojiPicker
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="Add emoji"
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+
+                <EmojiPicker
+                  isOpen={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onEmojiClick={handleEmojiSelect}
+                  buttonRef={emojiButtonRef}
+                />
+              </div>
+            )}
+
+            <div className="flex-1">
+              <EmojiMiniBar
+                userId={nickname}
+                currentText={message}
+                onEmojiInsert={handleEmojiInsert}
+                className="pl-0 "
+              />
+
+              <button
+                onClick={toggleCamera}
+                className={`fixed bottom-20 right-6 p-3 mb-2 rounded-full shadow-lg transition-all z-40 ${
+                  isCameraOn
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-white text-gray-600 hover:bg-gray-100'
+                }`}
+                title={isCameraOn ? "Turn off camera" : "Turn on camera"}
+              >
+                <Camera className="w-6 h-6" />
+              </button>
+
+              <div className="relative">
+                <textarea
+                  value={message}
+                  onChange={handleInputChange}
+                  placeholder={getPlaceholderText()}
+                  className={`w-full px-4 py-3 rounded-2xl border border-green-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 outline-none resize-none transition-all bg-white shadow-sm overflow-y-auto ${micVisible ? 'pr-12' : ''}`}
+                  rows={1}
+                  style={{
+                    minHeight: '48px',
+                    maxHeight: '120px',
+                    height: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain'
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  ref={(el) => {
+                    textareaRef.current = el;
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e);
+                    } else if (e.key === 'Escape') {
+                      setSelfTyping(false);
+                      stopTyping();
+                      if (replyToMood) {
+                        setReplyToMood(null);
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!message.trim()) {
+                      setSelfTyping(false);
+                      stopTyping();
+                    }
+                  }}
+                />
+
+                <div className="absolute bottom-2 right-2 z-10">
+                  <VoiceRecordButton
+                    isRecording={isRecording}
+                    recordingTime={recordingTime}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    isVisible={micVisible}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!message.trim() && !selectedImage && !selectedVideo && !selectedFile}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-3 rounded-full hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl z-10"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <MoodPicker
+        isOpen={showMoodPicker}
+        onClose={() => setShowMoodPicker(false)}
+        onSelectMood={setMood}
+        onDeleteMood={deleteMood}
+        currentMood={userMood?.emoji}
+      />
+
+      {memoryState === "password" && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl border border-gray-200">
+            <h2 className="text-lg font-semibold text-center mb-4 text-gray-800">
+              🔐 Enter Memory Password
+            </h2>
+
+            <input
+              type="password"
+              value={memoryPassword}
+              onChange={(e) => setMemoryPassword(e.target.value)}
+              placeholder="Enter password..."
+              className="w-full px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-3"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleVerifyMemoryPassword();
+                }
+              }}
+            />
+
+            {memoryError && (
+              <p className="text-red-500 text-sm text-center mb-2">
+                {memoryError}
+              </p>
+            )}
+
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={() => setMemoryState("closed")}
+                className="flex-1 py-2 rounded-xl border border-gray-300 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleVerifyMemoryPassword}
+                className="flex-1 py-2 rounded-xl bg-yellow-500 text-white hover:bg-yellow-600"
+              >
+                Enter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {memoryState === "open" && (
+        <CoupleMemoryPage nickname={nickname} onExit={() => setMemoryState("closed")} />
+      )}
+
+      <div className={`fixed inset-0 pointer-events-none overflow-hidden transition-opacity duration-500 ${showKissRain || isReactorActive ? 'opacity-0' : 'opacity-100'}`}>
+        <div className="absolute top-20 left-10 text-blue-200 text-3xl animate-bounce">🩺</div>
+        <div className="absolute top-32 right-20 text-green-200 text-2xl animate-pulse">👨‍⚕️</div>
+        <div className="absolute bottom-40 left-32 text-purple-300 text-4xl animate-bounce">🩺</div>
+        <div className="absolute bottom-20 right-16 text-indigo-300 text-2xl animate-pulse">👩‍⚕️</div>
+        <div className="absolute top-60 right-32 text-pink-300 text-2xl animate-pulse">👨‍⚕️</div>
+      </div>
+
+      {process.env.NODE_ENV === 'development' && (
+        <PresenceDebugPanel
+          userId={nickname}
+          isOtherUserOnline={isOtherUserOnline}
+          otherUserLastSeen={otherUserLastSeen}
+          connectionStatus={connectionStatus}
+        />
+      )}
+    </div>
+  );
+}
+
+export default Chat2;
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile, Heart, AlertCircle } from 'lucide-react';
+import InstagramPlusButton from '../components/InstagramPlusButton';
+import MoodPicker from '../components/MoodPicker';
+import MoodDisplay from '../components/MoodDisplay';
+import ReplyToMoodPill from '../components/ReplyToMoodPill';
+import { useChat } from '../hooks/useChat';
+import { useMood } from '../hooks/useMood';
+import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTyping';
+import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
+import KissEmojiRain from '../components/KissEmojiRain';
+import RobotCloudChat3 from '../components/RobotCloudChat3';
+import LovePulse from '../components/LovePulse';
+import { useLovePulse } from '../hooks/useLovePulse';
+import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
+import MoodReactor from '../components/MoodReactor';
+import { useMessageSeen } from '../hooks/useMessageSeen';
+import { useTabVisibility } from '../hooks/useTabVisibility';
+import { useEmergencyExit } from '../hooks/useEmergencyExit';
+import TypingIndicatorChat3 from '../components/TypingIndicatorChat3';
+import { uploadImageToSupabase, uploadVideoToSupabase, uploadFileToSupabase } from '../lib/supabase';
+import { calculateSpacingForAllMessages } from '../lib/messageSpacing';
+import { onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase';
+import { lastSeenDb } from '../firebase-lastseen';
+import { useMoodReactor } from '../hooks/useMoodReactor';
+import { useHugDetection } from '../hooks/useHugDetection';
+import { useLastSeen } from '../hooks/useLastSeen';
+import PresenceIndicator from '../components/PresenceIndicator';
+import PresenceDebugPanel from '../components/PresenceDebugPanel';
+import { useFaceDetection } from '../hooks/useFaceDetection';
+import { useCameraState } from '../hooks/useCameraState';
+import CameraButton from '../components/CameraButton';
+import EmojiPicker from '../components/EmojiPicker';
+import EmojiMiniBar from '../components/EmojiMiniBar';
+import { useFrequentEmojis } from '../hooks/useFrequentEmojis';
+import VideoPreviewModal from '../components/VideoPreviewModal';
+import FilePreviewModal from '../components/FilePreviewModal';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { VoiceMessagePreview } from '../components/VoiceMessagePreview';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import VoiceMessageInline from '../components/VoiceMessageInline';
+import { useAmmeSafetyLogout } from '../hooks/useAmmeSafetyLogout';
+
+const BACKEND_URL = "https://notification-production-bdd8.up.railway.app";
+
+interface Chat3Props {
+  nickname: 'Vishwa' | 'Ammu';
+  onLogout: () => void;
+  onSwitchToAIChat: () => void;
+  onSwitchToChat2: () => void;
+  onOpenMemory?: () => void;
+}
+
+function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMemory }: Chat3Props) {
+  useEmergencyExit(nickname);
+
+  const [message, setMessage] = useState('');
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showKissRain, setShowKissRain] = useState(false);
+  const [currentChat, setCurrentChat] = useState('chat3');
+  const [selfTyping, setSelfTyping] = useState(false);
+  const [useBlackText, setUseBlackText] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; text: string; by: string } | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [selectedMessageForDelete, setSelectedMessageForDelete] = useState<string | null>(null);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
+  const [replyToMood, setReplyToMood] = useState<{ emoji: string; partnerNickname: string } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const imagePreviewUrlRef = useRef<string | null>(null);
+  const videoPreviewUrlRef = useRef<string | null>(null);
+  const uploadAbortController = useRef<AbortController | null>(null);
+
+  const {
+    isRecording,
+    recordingTime,
+    audioBlob,
+    audioUrl,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    resetRecording,
+  } = useVoiceRecorder();
+
+  const { isCameraOn, toggleCamera, setCameraOff, isLoading: isCameraStateLoading } = useCameraState(nickname);
+
+  const handleFaceViolation = () => {
+    console.log('🚨 Face violation detected, redirecting to Chat1...');
+    setCameraOff();
+    onSwitchToAIChat();
+  };
+
+  const { isLoading: isCameraLoading, faceCount } = useFaceDetection({
+    isEnabled: isCameraOn,
+    onViolation: handleFaceViolation,
+    onToggle: setCameraOff
+  });
+
+  const { msgs, send, clear, deleteMessage, loading } = useChat('privateMessages', nickname);
+  const { userMood, otherUserMood, setMood, deleteMood } = useMood(nickname);
+  const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
+  useOptimizedActivity(nickname);
+  const otherUserActive = useOtherUserActivity(nickname === 'Vishwa' ? 'Ammu' : 'Vishwa');
+
+  // 🔥 TYPING LISTENER via Socket.IO (instant, zero Firebase cost)
+  const otherUser = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
+  const isOtherUserTyping = useTypingListener(otherUser as 'Vishwa' | 'Ammu');
+
+  useEffect(() => {
+    const setChatContext = async () => {
+      try {
+        await setDoc(doc(lastSeenDb, 'userContext', nickname), {
+          currentChat: 'chat3',
+          timestamp: serverTimestamp(),
+          userId: nickname
+        });
+      } catch (error) {
+        console.error('Error setting chat context:', error);
+      }
+    };
+    setChatContext();
+  }, [nickname]);
+
+  const isTabActive = useTabVisibility();
+  const { socket } = useMessageSeen({
+    nickname,
+    messages: msgs,
+    isTabActive
+  });
+
+  const { updateFrequentEmojis } = useFrequentEmojis(nickname);
+
+  const { isReactorActive, handleReactorComplete } = useMoodReactor({
+    userMood,
+    otherUserMood,
+    nickname,
+    selfTyping,
+    lastMessageTimestamp: msgs.length > 0 ? msgs[msgs.length - 1].ts : null
+  });
+
+  const { pendingHugFrom, isPendingHug } = useHugDetection({
+    messages: msgs,
+    nickname,
+    onHugSuccess: async () => {
+      const partnerName = nickname === 'Vishwa' ? 'Ammu' : 'Vishwa';
+      const hugMessage = `You and ${partnerName} were hugged 🫂 Have a great chat!`;
+      await send(hugMessage, 'system');
+    }
+  });
+
+  useAmmeSafetyLogout({
+    nickname,
+    onLogout,
+    isEnabled: true
+  });
+
+  const { otherUserLastSeen, isOtherUserOnline, connectionStatus } = useLastSeen({
+    userId: nickname,
+    otherUserId: otherUser
+  });
+
+  // ── Premium: Love Pulse + Silent Read Signal ──
+  const lovePulseActive = useLovePulse({
+    isOtherUserOnline,
+    isOtherUserTyping,
+    hasMessages: msgs.length > 0,
+  });
+  const { silentReadActive, targetMessageId } = useSilentReadSignal({
+    messages: msgs,
+    nickname,
+    otherUser: otherUser as 'Vishwa' | 'Ammu',
+  });
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrlRef.current) {
+        URL.revokeObjectURL(imagePreviewUrlRef.current);
+      }
+      if (videoPreviewUrlRef.current) {
+        URL.revokeObjectURL(videoPreviewUrlRef.current);
+      }
+      if (uploadAbortController.current) {
+        uploadAbortController.current.abort();
+      }
+      if (isCameraOn) {
+        console.log('🚪 Exiting Chat3, turning off camera...');
+        setCameraOff();
+      }
+    };
+  }, [isCameraOn, setCameraOff]);
+
+  const spacingMap = useMemo(() => {
+    return calculateSpacingForAllMessages(msgs);
+  }, [msgs]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollButton(!isAtBottom && msgs.length > 0);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [msgs.length]);
+
+  // NOTE: Typing listener now uses Socket.IO (useTypingListener above)
+  // Old Firestore-based listener removed for zero Firebase cost and instant delivery
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [msgs]);
+
+  useEffect(() => {
+    if (!selfTyping) return;
+    const t = setTimeout(() => setSelfTyping(false), 3000);
+    return () => clearTimeout(t);
+  }, [selfTyping]);
+
+  const messageQueueRef = useRef<string[]>([]);
+  const isProcessingQueueRef = useRef(false);
+
+  const sendMessageNotification = async (messageText: string) => {
+    if (nickname !== "Ammu") return;
+
+    const safeMessage = (messageText ?? "").trim();
+
+    if (!safeMessage) {
+      if (msgs.length > 0) {
+        const last = msgs[msgs.length - 1].text;
+        if (last?.trim()) {
+          messageQueueRef.current.push(last.trim());
+          if (!isProcessingQueueRef.current) processQueue();
+        }
+      }
+      return;
+    }
+
+    if (isOtherUserOnline === undefined || isOtherUserOnline === null) {
+      messageQueueRef.current.push(safeMessage);
+      if (!isProcessingQueueRef.current) processQueue();
+      return;
+    }
+
+    if (isOtherUserOnline) {
+      return;
+    }
+
+    messageQueueRef.current.push(safeMessage);
+    if (!isProcessingQueueRef.current) processQueue();
+  };
+
+  const processQueue = async () => {
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+
+    while (messageQueueRef.current.length > 0) {
+      let nextMessage = messageQueueRef.current.shift();
+
+      if (!nextMessage || !nextMessage.trim()) {
+        continue;
+      }
+
+      nextMessage = nextMessage.trim();
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: nextMessage }),
+        });
+
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = { queued: true }; 
+        }
+
+        if (data.success) {
+          console.log("📨 SENT:", nextMessage);
+        } else if (data.queued) {
+          console.log("🔁 Backend queued:", nextMessage);
+        } else {
+          messageQueueRef.current.unshift(nextMessage);
+        }
+      } catch (err) {
+        await new Promise((r) => setTimeout(r, 1000));
+        messageQueueRef.current.unshift(nextMessage);
+      }
+
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+
+    isProcessingQueueRef.current = false;
+  };
+
+  const handleReply = (messageId: string, text: string) => {
+    const message = msgs.find(msg => msg.id === messageId);
+    if (message) {
+      setReplyTo({
+        id: messageId,
+        text: text,
+        by: message.by
+      });
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      await deleteMessage(messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      alert('Failed to delete message. Please try again.');
+    }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowScrollButton(false);
+  };
+
+  const isMobile = () => {
+    return window.innerWidth < 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  };
+
+  const handleEmojiButtonClick = () => {
+    if (!isMobile()) {
+      setShowEmojiPicker(!showEmojiPicker);
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    const textarea = textareaRef.current;
+
+    if (textarea) {
+      const start = textarea.selectionStart || 0;
+      const end = textarea.selectionEnd || 0;
+      const currentMessage = message;
+      const newMessage = currentMessage.slice(0, start) + emoji + currentMessage.slice(end);
+
+      setMessage(newMessage);
+
+      setTimeout(() => {
+        const newCursorPosition = start + emoji.length;
+        textarea.setSelectionRange(newCursorPosition, newCursorPosition);
+        textarea.focus();
+      }, 0);
+    } else {
+      setMessage(prev => prev + emoji);
+    }
+  };
+
+  const handleEmojiInsert = (emoji: string) => {
+    handleEmojiSelect(emoji);
+  };
+
+  const extractEmojisFromText = (text: string): string[] => {
+    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    return text.match(emojiRegex) || [];
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedImage) {
+      await handleSendImage();
+    } else if (selectedVideo) {
+      await handleSendVideo();
+    } else if (selectedFile) {
+      await handleSendFile();
+    } else if (message.trim()) {
+      const textToSend = message.trim();
+      setMessage('');
+      setReplyTo(null);
+      setReplyToMood(null);
+      setSelfTyping(false);
+      stopTyping();
+
+      let finalTextToSend = textToSend;
+      if (nickname !== 'Vishwa' && nickname !== 'Ammu') {
+        finalTextToSend = `🤖 ${textToSend}`;
+      }
+
+      const moodMetadata = replyToMood ? {
+        moodEmoji: replyToMood.emoji,
+        moodOwnerUserId: replyToMood.partnerNickname === 'Vishwa' ? 'Vishwa' : 'Ammu',
+        moodSetAt: new Date(),
+        isReplyToMood: true
+      } : undefined;
+
+      try {
+        await send(finalTextToSend, 'text', undefined, undefined, moodMetadata, replyTo);
+        await sendMessageNotification(finalTextToSend);
+
+        const emojisInMessage = extractEmojisFromText(finalTextToSend);
+        if (emojisInMessage.length > 0) {
+          updateFrequentEmojis(emojisInMessage);
+        }
+      } catch (error) {
+        console.error('Failed to send message:', error);
+      } finally {
+        textareaRef.current?.focus();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (msgs.length > 0) {
+      const latestMessage = msgs[msgs.length - 1];
+      if (latestMessage.text?.includes('😘') && latestMessage.by === 'Vishwa' && nickname === 'Ammu') {
+        setShowKissRain(true);
+      }
+    }
+  }, [msgs, nickname]);
+
+  const handleImageSelect = useCallback((file: File) => {
+    setCameraError(null);
+    
+    if (imagePreviewUrlRef.current) {
+      URL.revokeObjectURL(imagePreviewUrlRef.current);
+      imagePreviewUrlRef.current = null;
+    }
+    
+    if (!file || file.size === 0) {
+      setCameraError('Invalid image file');
+      return;
+    }
+    
+    setSelectedImage(file);
+    const previewUrl = URL.createObjectURL(file);
+    imagePreviewUrlRef.current = previewUrl;
+    setImagePreview(previewUrl);
+  }, []);
+
+  const handleCameraImageSelect = useCallback(async (file: File, isBackCamera: boolean) => {
+    setCameraError(null);
+    
+    try {
+      if (!file || file.size === 0) {
+        throw new Error('Camera returned empty file');
+      }
+
+      console.log(`📸 Photo taken:`, Math.round(file.size/1024), 'KB', isBackCamera ? '(Back)' : '(Front)');
+
+      if (imagePreviewUrlRef.current) {
+        URL.revokeObjectURL(imagePreviewUrlRef.current);
+        imagePreviewUrlRef.current = null;
+      }
+      
+      setSelectedImage(file);
+      
+      const previewUrl = URL.createObjectURL(file);
+      imagePreviewUrlRef.current = previewUrl;
+      setImagePreview(previewUrl);
+      
+      console.log('✅ Preview created successfully');
+      
+    } catch (error: any) {
+      console.error('Camera handling error:', error);
+      setCameraError(error.message || 'Failed to process image');
+      setSelectedImage(null);
+      setImagePreview(null);
+    }
+  }, []);
+
+  const handleCameraError = useCallback((errorMsg: string) => {
+    setCameraError(errorMsg);
+    setTimeout(() => setCameraError(null), 5000);
+  }, []);
+
+  const handleSendImage = async () => {
+    if (!selectedImage || isUploading) return;
+    
+    setIsUploading(true);
+    setCameraError(null);
+
+    const fileToUpload = selectedImage;
+    const fileName = `${nickname}_${Date.now()}_${fileToUpload.name || 'photo.jpg'}`;
+    
+    const isFromGallery = (fileToUpload as any).__isFromGallery === true;
+    
+    try {
+      console.log('📤 Starting upload:', fileName, 'Size:', Math.round(fileToUpload.size/1024), 'KB', isFromGallery ? '(Gallery)' : '(Camera)');
+
+      let imageUrl: string;
+      let retries = 0;
+      const maxRetries = 5;
+
+      while (retries < maxRetries) {
+        try {
+          const isBackCamera = fileToUpload.size > 3 * 1024 * 1024 && !isFromGallery;
+          
+          imageUrl = await uploadImageToSupabase(
+            fileToUpload, 
+            fileName,
+            isBackCamera,
+            isFromGallery
+          );
+          
+          console.log('✅ Upload success:', imageUrl);
+          break;
+          
+        } catch (uploadError: any) {
+          retries++;
+          console.warn(`Upload attempt ${retries} failed:`, uploadError.message);
+          
+          if (retries >= maxRetries) {
+            throw new Error('Upload failed after ' + maxRetries + ' attempts. Please try again.');
+          }
+          
+          await new Promise(r => setTimeout(r, 2000 * retries));
+        }
+      }
+
+      await send('', 'image', imageUrl!, fileName, undefined, replyTo);
+      await sendMessageNotification(`📷 ${nickname} sent a photo`);
+
+      setSelectedImage(null);
+      setImagePreview(null);
+      if (imagePreviewUrlRef.current) {
+        URL.revokeObjectURL(imagePreviewUrlRef.current);
+        imagePreviewUrlRef.current = null;
+      }
+      
+      setReplyTo(null);
+
+    } catch (error: any) {
+      console.error('Image upload failed:', error);
+      
+      let errorMsg = 'Upload failed. Please try again.';
+      if (error?.message?.includes('memory') || error?.name === 'NotReadableError') {
+        errorMsg = 'Phone memory full! Please close other apps and try again.';
+      } else if (error?.message?.includes('timeout') || error?.message?.includes('network')) {
+        errorMsg = 'Network too slow! Please move to better signal area.';
+      }
+      
+      setCameraError(errorMsg);
+      setTimeout(() => setCameraError(null), 8000);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelImage = async () => {
+    if (uploadAbortController.current) {
+      uploadAbortController.current.abort();
+      uploadAbortController.current = null;
+    }
+    if (imagePreviewUrlRef.current) {
+      URL.revokeObjectURL(imagePreviewUrlRef.current);
+      imagePreviewUrlRef.current = null;
+    }
+    
+    setSelectedImage(null);
+    setImagePreview(null);
+    setCameraError(null);
+  };
+
+  const handleVideoSelect = useCallback((file: File) => {
+    setCameraError(null);
+    
+    if (videoPreviewUrlRef.current) {
+      URL.revokeObjectURL(videoPreviewUrlRef.current);
+    }
+    
+    setSelectedVideo(file);
+    const previewUrl = URL.createObjectURL(file);
+    videoPreviewUrlRef.current = previewUrl;
+    setVideoPreview(previewUrl);
+  }, []);
+
+  const handleSendVideo = async () => {
+    if (!selectedVideo || isUploading) return;
+    
+    setIsUploading(true);
+
+    try {
+      const timestamp = Date.now();
+      const fileName = `${nickname}_${timestamp}_${selectedVideo.name}`;
+
+      const videoUrl = await uploadVideoToSupabase(selectedVideo, fileName);
+
+      await send('', 'video', undefined, fileName, undefined, replyTo, videoUrl);
+      await sendMessageNotification(`🎥 ${nickname} sent a video`);
+
+      if (videoPreviewUrlRef.current) {
+        URL.revokeObjectURL(videoPreviewUrlRef.current);
+        videoPreviewUrlRef.current = null;
+      }
+      
+      setSelectedVideo(null);
+      setVideoPreview(null);
+      setReplyTo(null);
+
+    } catch (error: any) {
+      console.error('Video upload failed:', error);
+      const skip = (window as any).__AMMU_SKIP_LOGOUT__;
+      skip?.start();
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      setTimeout(() => skip?.stop(), 800);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelVideo = () => {
+    if (videoPreviewUrlRef.current) {
+      URL.revokeObjectURL(videoPreviewUrlRef.current);
+      videoPreviewUrlRef.current = null;
+    }
+    setSelectedVideo(null);
+    setVideoPreview(null);
+  };
+
+  const handleFileSelect = useCallback((file: File) => {
+    setCameraError(null);
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setFilePreview(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const handleSendFile = async () => {
+    if (!selectedFile || isUploading) return;
+    
+    setIsUploading(true);
+
+    try {
+      const timestamp = Date.now();
+      const fileName = `${nickname}_${timestamp}_${selectedFile.name}`;
+
+      const fileUrl = await uploadFileToSupabase(selectedFile, fileName);
+
+      await send(
+        '',
+        'file',
+        undefined,
+        selectedFile.name,
+        undefined,
+        replyTo,
+        undefined,
+        fileUrl,
+        selectedFile.type
+      );
+
+      await sendMessageNotification(`📄 ${nickname} sent a file: ${selectedFile.name}`);
+
+      setSelectedFile(null);
+      setFilePreview(null);
+      setReplyTo(null);
+
+    } catch (error: any) {
+      console.error('File upload failed:', error);
+      const skip = (window as any).__AMMU_SKIP_LOGOUT__;
+      skip?.start();
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      setTimeout(() => skip?.stop(), 800);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+  };
+
+  const handleCancelReply = () => {
+    setReplyTo(null);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setMessage(value);
+    const active = !!value.trim();
+    setSelfTyping(active);
+
+    if (active) {
+      handleTyping();
+    } else {
+      stopTyping();
+    }
+  };
+
+  const getPlaceholderText = () => {
+    if (replyToMood) {
+      return `Reply to ${replyToMood.partnerNickname}'s mood...`;
+    }
+    return "Enter message...";
+  };
+
+  const handleClearOrDelete = async () => {
+    if (selectedMessageForDelete) {
+      deleteMessage(selectedMessageForDelete);
+      setSelectedMessageForDelete(null);
+      return;
+    }
+
+    const skip = (window as any).__AMMU_SKIP_LOGOUT__;
+    skip?.start();
+
+    const userConfirmed = window.confirm(
+      `Are you sure ${nickname} wants to delete all messages?`
+    );
+
+    setTimeout(() => {
+      skip?.stop();
+    }, 800);
+
+    if (userConfirmed) {
+      try {
+        await clear();
+      } catch (e) {
+        alert('Failed to delete messages. Please try again.');
+        console.error('Clear failed:', e);
+      }
+    }
+  };
+
+  const formatMessageTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const messageDate = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const TZ = 'Asia/Kolkata';
+    const dayFmt = new Intl.DateTimeFormat('en-IN', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const isToday = dayFmt.format(messageDate) === dayFmt.format(new Date());
+    if (isToday) {
+      return new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit', hour12: true }).format(messageDate);
+    }
+    return new Intl.DateTimeFormat('en-US', { timeZone: TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(messageDate);
+  };
+
+  const micVisible = (!message.trim() && !selectedImage && !selectedVideo && !selectedFile) || isRecording;
+
+  const handleSendVoiceMessage = async (voiceBlob: Blob) => {
+    if (isUploading) return;
+    setIsUploading(true);
+    try {
+      const timestamp = Date.now();
+      const fileName = `${nickname}_${timestamp}_voice.webm`;
+      const voiceFile = new File([voiceBlob], fileName, { type: 'audio/webm' });
+
+      const fileUrl = await uploadFileToSupabase(voiceFile, fileName);
+
+      await send('', 'file', undefined, fileName, undefined, replyTo, undefined, fileUrl, 'audio/webm');
+      await sendMessageNotification(`🎤 ${nickname} sent a voice message`);
+
+      resetRecording();
+      setReplyTo(null);
+    } catch (error) {
+      console.error('Voice upload failed:', error);
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className="h-[100dvh] w-full relative overflow-hidden"
+      style={{
+        backgroundImage: 'url(https://i.postimg.cc/tT43g7W9/Whats-App-Image-2025-08-14-at-22-04-13-2b4f9f06.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'scroll',
+        minHeight: '100dvh',
+      }}
+    >
+      <div className="absolute inset-0 bg-black/10"></div>
+
+      <KissEmojiRain show={showKissRain} onComplete={() => setShowKissRain(false)} />
+      <MoodReactor isActive={isReactorActive} onComplete={handleReactorComplete} />
+
+      {isCameraOn && (
+        <CameraButton
+          isCameraOn={isCameraOn}
+          toggleCamera={toggleCamera}
+          isLoading={isCameraLoading}
+          faceCount={faceCount}
+        />
+      )}
+
+      {cameraError && (
+        <div className="fixed top-20 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg z-50 flex items-center gap-2 shadow-lg">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span className="text-sm">{cameraError}</span>
+          <button 
+            onClick={() => setCameraError(null)}
+            className="ml-auto text-red-700 hover:text-red-900"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="fixed top-0 left-0 right-0 bg-transparent backdrop-blur-md px-4 py-4 z-50 shadow-lg border-b border-white/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+              {isOtherUserOnline ? (
+                <LovePulse active={lovePulseActive} size={36}>
+                  <span className="w-17 h-17 sm:w-8 sm:h-8 text-red-500">
+                    <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-white flex-shrink-0 fill-white" />
+                  </span>
+                </LovePulse>
+              ) : (
+                <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-white flex-shrink-0 fill-red" />
+              )}
+
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-lg font-bold text-white truncate">
+                  VIS & NAV
+                </h1>
+                <PresenceIndicator
+                  isOnline={isOtherUserOnline}
+                  lastSeen={otherUserLastSeen}
+                  connectionStatus={connectionStatus}
+                  className="text-xs text-white"
+                />
+              </div>
+            </div>
+
+            <div className="hidden sm:block flex-shrink-0">
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={onSwitchToChat2}
+                  className="text-xs font-medium text-blue-200 hover:text-white transition-colors cursor-pointer"
+                >
+                  Moods
+                </button>
+                <MoodDisplay
+                  userMood={userMood}
+                  otherUserMood={otherUserMood}
+                  nickname={nickname}
+                  onOpenPicker={() => setShowMoodPicker(true)}
+                  onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-2 flex-shrink-0">
+              <button
+                onClick={onSwitchToAIChat}
+                className="px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                title="Switch to AI Chat"
+              >
+                AI
+              </button>
+
+              <button
+                onClick={onOpenMemory}
+                className="px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors"
+                title="Open Memory"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={handleClearOrDelete}
+                className={`px-3 py-2 sm:px-3 sm:py-2 rounded-full text-sm sm:text-xs font-semibold transition-colors ${
+                  selectedMessageForDelete
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-200'
+                }`}
+                title={selectedMessageForDelete ? "Delete selected message" : "Clear all messages"}
+              >
+                🗑️
+              </button>
+
+              <button
+                onClick={onLogout}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden md:inline">Exit</span>
+              </button>
+
+              <button
+                onClick={onLogout}
+                className="sm:hidden flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                title="Exit"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Exit</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="sm:hidden flex justify-center mt-3 pb-1">
+            <button
+              onClick={onSwitchToChat2}
+              className="text-xs font-medium text-blue-200 hover:text-white transition-colors cursor-pointer"
+            >
+              Moods
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="sm:hidden fixed top-16 left-0 right-0 z-40 flex justify-center px-4">
+        <div className="flex justify-center">
+          <div className="bg-transparent backdrop-blur-sm rounded-b-3xl px-6 py-2 shadow-lg border border-white/30 border-t-0 mt-4">
+            <div className="flex justify-center mb-1">
+              <span className="text-xs font-medium text-blue-200">Moods</span>
+            </div>
+            <MoodDisplay
+              userMood={userMood}
+              otherUserMood={otherUserMood}
+              nickname={nickname}
+              onOpenPicker={() => setShowMoodPicker(true)}
+              onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        ref={messagesContainerRef}
+        className="pt-20 sm:pt-20 pb-32 max-w-4xl mx-auto p-4 relative z-10 h-screen overflow-y-auto"
+        style={{ paddingTop: window.innerWidth < 640 ? '180px' : '80px' }}
+      >
+        {loading && (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">📚</div>
+            <p className="text-white">Loading messages...</p>
+          </div>
+        )}
+        <div className="space-y-2">
+          {msgs.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📚💬</div>
+              <p className="text-white italic">Start your study discussion here...</p>
+            </div>
+          ) : (
+            msgs.map((msg: any, idx: number) => {
+              const isOwn = msg.by === nickname;
+              const isAudio =
+                (msg.mimeType && msg.mimeType.startsWith('audio/')) ||
+                (msg.fileUrl && /\.(webm|mp3|m4a|ogg|wav)$/i.test(msg.fileUrl)) ||
+                (msg.fileName && /\.(webm|mp3|m4a|ogg|wav)$/i.test(msg.fileName)) ||
+                msg.type === 'audio';
+
+              const hasSpacing = spacingMap[msg.id] || false;
+
+              if (isAudio && (msg.fileUrl || msg.audioUrl)) {
+                const src = msg.audioUrl || msg.fileUrl;
+                return (
+                  <RobotCloudChat3
+                    key={msg.id}
+                    messageId={msg.id}
+                    text=""
+                    audioUrl={src}
+                    isOwn={isOwn}
+                    isUser={isOwn}
+                    isAI={msg.by !== nickname && (msg.text?.startsWith('🤖') || msg.by === 'AI')}
+                    type="voice"
+                    currentUserNickname={nickname}
+                    timestamp={formatMessageTime(msg.ts)}
+                    useBlackText={useBlackText}
+                    onReply={handleReply}
+                    onDelete={handleDeleteMessage}
+                    replyTo={msg.replyTo}
+                    msg={msg}
+                    hasSpacing={hasSpacing}
+                    silentReadActive={silentReadActive && targetMessageId === msg.id}
+                  />
+                );
+              }
+
+              return (
+                <RobotCloudChat3
+                  key={msg.id}
+                  messageId={msg.id}
+                  text={msg.text}
+                  imageUrl={msg.imageUrl}
+                  videoUrl={msg.videoUrl}
+                  fileUrl={msg.fileUrl}
+                  fileName={msg.fileName}
+                  mimeType={msg.mimeType}
+                  isOwn={isOwn}
+                  isUser={isOwn}
+                  isAI={msg.by !== nickname && (msg.text?.startsWith('🤖') || msg.by === 'AI')}
+                  type={msg.type}
+                  currentUserNickname={nickname}
+                  timestamp={formatMessageTime(msg.ts)}
+                  useBlackText={useBlackText}
+                  onReply={handleReply}
+                  onDelete={handleDeleteMessage}
+                  replyTo={msg.replyTo}
+                  msg={msg}
+                  hasSpacing={hasSpacing}
+                  silentReadActive={silentReadActive && targetMessageId === msg.id}
+                />
+              );
+            })
+          )}
+          {isOtherUserTyping && (
+            <TypingIndicatorChat3 nickname={otherUser} currentUserNickname={nickname} />
+          )}
+          <div ref={messagesEndRef} />
+          <div className="h-24"></div>
+        </div>
+      </div>
+
+      {showScrollButton && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-32 right-6 mb-4 bg-[#4A6FA5] text-white p-3 rounded-full shadow-lg hover:bg-[#3A5F95] transition-all z-40"
+          title="Scroll to latest message"
+        >
+          💘
+        </button>
+      )}
+
+      {selectedImage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-4 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-800">
+                Send Image
+              </h3>
+              <button 
+                onClick={handleCancelImage} 
+                disabled={isUploading}
+                className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            {imagePreview && (
+              <img 
+                src={imagePreview} 
+                alt="Preview" 
+                className="w-full h-auto rounded-xl mb-4 max-h-64 object-cover" 
+              />
+            )}
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={handleCancelImage}
+                disabled={isUploading}
+                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSendImage} 
+                disabled={isUploading} 
+                className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isUploading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  '⚡ Send'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <VideoPreviewModal
+        videoFile={selectedVideo}
+        videoPreview={videoPreview}
+        isOpen={!!videoPreview}
+        onClose={handleCancelVideo}
+        onSend={handleSendVideo}
+        isUploading={isUploading}
+      />
+
+      <FilePreviewModal
+        file={selectedFile}
+        filePreview={filePreview}
+        isOpen={!!filePreview}
+        onClose={handleCancelFile}
+        onSend={handleSendFile}
+        isUploading={isUploading}
+      />
+
+      {audioUrl && audioBlob && !isRecording && (
+        <VoiceMessagePreview
+          audioUrl={audioUrl}
+          audioBlob={audioBlob}
+          onSend={handleSendVoiceMessage}
+          onDelete={resetRecording}
+        />
+      )}
+
+      <div className="fixed bottom-0 left-0 right-0 bg-transparent p-4 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        {replyToMood && (
+          <ReplyToMoodPill
+            emoji={replyToMood.emoji}
+            partnerNickname={replyToMood.partnerNickname}
+            onCancel={() => setReplyToMood(null)}
+          />
+        )}
+
+        {replyTo && (
+          <div className="bg-blue-100 p-2 mb-1 rounded relative text-sm text-gray-800">
+            <span className="font-bold text-blue-800">Replying to {replyTo.by} </span>
+            <div className="truncate max-w-xs">
+              {replyTo.text.split(' ').slice(0, 5).join(' ')}
+              {replyTo.text.split(' ').length > 8 && '...'}
+            </div>
+            <button
+              className="absolute top-1 left-1/2 transform -translate-x-1/2 text-gray-500 hover:text-gray-700"
+              onClick={() => setReplyTo(null)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+          <div className="flex gap-3 items-end">
+            <InstagramPlusButton
+              onImageSelect={handleImageSelect}
+              onVideoSelect={handleVideoSelect}
+              onFileSelect={handleFileSelect}
+              onCameraImageSelect={handleCameraImageSelect}
+              onCameraError={handleCameraError}
+              theme="chat3"
+            />
+
+            {!isMobile() && (
+              <div className="relative">
+                <button
+                  ref={emojiButtonRef}
+                  type="button"
+                  onClick={handleEmojiButtonClick}
+                  className={`p-3 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl ${
+                    showEmojiPicker
+                      ? 'bg-[#4A90E2] text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="Add emoji"
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+
+                <EmojiPicker
+                  isOpen={showEmojiPicker}
+                  onClose={() => setShowEmojiPicker(false)}
+                  onEmojiClick={handleEmojiSelect}
+                  buttonRef={emojiButtonRef}
+                />
+              </div>
+            )}
+
+            <div className="flex-1">
+              <EmojiMiniBar
+                userId={nickname}
+                currentText={message}
+                onEmojiInsert={handleEmojiInsert}
+                className="pl-0"
+              />
+
+              <button
+                onClick={toggleCamera}
+                className={`fixed bottom-20 right-6 p-3 mb-2 rounded-full shadow-lg transition-all z-40 ${
+                  isCameraOn
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-white text-gray-600 hover:bg-gray-100'
+                }`}
+                title={isCameraOn ? "Turn off camera" : "Turn on camera"}
+              >
+                <Camera className="w-6 h-6" />
+              </button>
+
+              <div className="relative">
+                <textarea
+                  value={message}
+                  onChange={handleInputChange}
+                  placeholder={getPlaceholderText()}
+                  className={`w-full px-4 py-3 rounded-2xl focus:ring-2 focus:ring-blue-100 outline-none resize-none transition-all bg-white shadow-sm text-black placeholder-black overflow-y-auto ${micVisible ? 'pr-12' : ''}`}
+                  rows={1}
+                  style={{
+                    minHeight: '48px',
+                    maxHeight: '120px',
+                    height: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain'
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  ref={(el) => {
+                    textareaRef.current = el;
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e);
+                    } else if (e.key === 'Escape') {
+                      setSelfTyping(false);
+                      stopTyping();
+                      if (replyToMood) {
+                        setReplyToMood(null);
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!message.trim()) {
+                      setSelfTyping(false);
+                      stopTyping();
+                    }
+                  }}
+                />
+
+                <div className="absolute bottom-2 right-2 z-10">
+                  <VoiceRecordButton
+                    isRecording={isRecording}
+                    recordingTime={recordingTime}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    isVisible={micVisible}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!message.trim() && !selectedImage && !selectedVideo && !selectedFile}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-3 rounded-full hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl z-10"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <MoodPicker
+        isOpen={showMoodPicker}
+        onClose={() => setShowMoodPicker(false)}
+        onSelectMood={setMood}
+        onDeleteMood={deleteMood}
+        currentMood={userMood?.emoji}
+      />
+    </div>
+  );
+}
+
+export default Chat3;
