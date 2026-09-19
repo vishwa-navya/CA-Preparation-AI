@@ -50,7 +50,7 @@ import { useLovePulse } from '../hooks/useLovePulse';
 import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
 // ──────────────────────────────────────────────────────────────────────────────
 
-const BACKEND_URL = "https://notification2.onrender.com"; //// vishwanavyasree account 12/5/26
+const BACKEND_URL = "https://notification-1-7zzu.onrender.com"; //// vishwanavyasree account 12/5/26
 
 
 interface Chat2Props {
