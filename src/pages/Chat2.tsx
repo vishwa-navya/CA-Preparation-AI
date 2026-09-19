@@ -390,6 +390,26 @@ const isProcessingRef = useRef(false);
 const isOtherUserOnlineRef = useRef(false);
 useEffect(() => { isOtherUserOnlineRef.current = isOtherUserOnline; }, [isOtherUserOnline]);
 
+// ── Keep-alive: Ammu pings the notification server every 9 min ────────────────
+// This prevents Render from sleeping while Ammu is online, so her messages
+// to Vishwa always reach Telegram. When Ammu closes the app, pings stop and
+// the server sleeps — saving free tier hours.
+useEffect(() => {
+  if (nickname !== "Ammu") return;
+
+  const ping = () => {
+    fetch(`${BACKEND_URL}/keepalive`, { method: "POST" })
+      .then(() => console.log("💓 Keep-alive ping sent to notification server"))
+      .catch((e) => console.log("⚠️ Keep-alive ping failed:", e.message));
+  };
+
+  // Ping immediately on mount, then every 9 minutes
+  ping();
+  const interval = setInterval(ping, 9 * 60 * 1000);
+
+  return () => clearInterval(interval);
+}, [nickname]);
+
 const sendMessageNotification = async (messageText: string) => {
   // Only Ammu sends notifications to Vishwa
   if (nickname !== "Ammu") return;
