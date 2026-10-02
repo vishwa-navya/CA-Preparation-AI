@@ -289,7 +289,7 @@ function App() {
                     <span
                       className={`text-xs font-medium mt-1 transition-colors ${
                         isSafe ? 'text-green-600' : 'text-gray-400'
-                      }`
+                      }`}
                     >
                       Ammu
                     </span>
@@ -316,7 +316,7 @@ function App() {
                     <span
                       className={`text-xs font-medium mt-1 transition-colors ${
                         isSafe ? 'text-blue-600' : 'text-gray-400'
-                      }`
+                      }`}
                     >
                       Vishwa
                     </span>
