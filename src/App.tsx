@@ -297,7 +297,7 @@ function App() {
           <p className="font-serif text-base italic text-[#527399] sm:text-lg">Your CA journey starts here ♡</p>
 
           <form onSubmit={handleLogin} className="mt-8 flex w-full max-w-sm flex-col items-center gap-5 sm:mt-10">
-            <label className="sr-only" htmlFor="login-name">Enter your name</label>
+            <label className="sr-only" htmlFor="login-name">Enter your name CA Student </label>
             <div className="flex h-14 w-full items-center rounded-full border border-[#7da9cb] bg-white/75 px-5 shadow-[0_5px_14px_rgba(62,112,157,0.13)] focus-within:border-[#397ec0] focus-within:ring-4 focus-within:ring-[#8fc1e8]/40">
               <UserRound className="mr-3 h-6 w-6 shrink-0 text-[#5c8db7]" strokeWidth={1.7} />
               <input
