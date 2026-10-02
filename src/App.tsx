@@ -203,154 +203,156 @@ function App() {
   const handleSwitchToChat3 = () => setCurrentPage('chat3');
   const handleOpenMemory = () => setCurrentPage('memory');
 
-  // 🧭 LOGIN PAGE — CA Study Desk Theme
+  // 🧭 LOGIN PAGE — CA study desk composition
   if (currentPage === 'login') {
     return (
       <div
-        className="w-full bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50
-                   flex items-center justify-center p-4 relative overflow-hidden"
+        className="relative min-h-full w-full overflow-hidden bg-[#dff2ff] text-[#173e70]"
         style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
       >
-        {/* Floating Stationery Emojis */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-10 left-4 text-amber-200 text-3xl md:text-4xl animate-pulse">📚</div>
-          <div className="absolute top-32 right-4 text-orange-200 text-2xl md:text-3xl animate-bounce">✏️</div>
-          <div className="absolute bottom-32 left-8 text-yellow-300 text-4xl md:text-5xl animate-pulse">📝</div>
-          <div className="absolute bottom-16 right-4 text-amber-300 text-xl md:text-2xl animate-bounce">🖊️</div>
-          <div className="hidden sm:block absolute top-1/2 left-1/4 text-orange-200 text-2xl md:text-3xl animate-pulse">📎</div>
-          <div className="hidden sm:block absolute top-60 right-10 text-amber-200 text-xl md:text-2xl animate-bounce">📏</div>
+        {/* Soft daylight and hand-drawn wall details */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-32 -top-24 h-80 w-[42rem] rotate-[24deg] bg-white/45 blur-3xl" />
+          <div className="absolute right-[-8rem] top-[-5rem] h-72 w-72 rounded-full bg-[#b8def5]/60 blur-2xl" />
+          <div className="absolute left-4 top-8 -rotate-6 font-serif text-lg leading-6 text-[#3e6592]/80 sm:left-10 sm:top-12">
+            Big dreams,
+            <br />
+            need smart
+            <br />
+            plans ♡
+          </div>
+          <div className="absolute right-5 top-8 rotate-6 font-serif text-lg text-[#3e6592]/80 sm:right-12 sm:top-14">
+            Future ♡
+            <br />
+            CA
+          </div>
+          <div className="absolute right-3 top-28 hidden w-24 rotate-3 rounded-sm border border-[#aacde7] bg-white/65 p-3 text-center font-serif text-xs leading-4 text-[#426486] shadow-sm sm:block">
+            Discipline
+            <br />
+            today
+            <br />
+            Freedom tomorrow ♡
+          </div>
+          <div className="absolute left-[-1.5rem] top-[38%] text-6xl opacity-35 sm:left-3 sm:text-7xl">🌿</div>
+          <div className="absolute right-[-1.5rem] top-[18%] text-7xl opacity-40 sm:right-3">🌿</div>
         </div>
 
-        {/* 🔒 Pin/Pencil Toggle Button (bottom-left corner) */}
+        {/* Small stationery cup on the left, matching the reference balance */}
+        <div className="absolute bottom-[18%] left-1 z-10 flex flex-col items-center sm:bottom-[17%] sm:left-7">
+          <div className="mb-[-0.45rem] flex items-end gap-0.5 text-xl sm:text-2xl">
+            <span className="rotate-[-18deg]">🖊️</span>
+            <span className="rotate-[12deg]">✏️</span>
+            <span className="rotate-[-8deg]">🖍️</span>
+          </div>
+          <div className="relative flex h-16 w-20 items-center justify-center rounded-b-2xl rounded-t-md border-2 border-[#aec9dd] bg-[#f7fbff] shadow-md sm:h-20 sm:w-24">
+            <div className="absolute inset-x-2 top-3 h-1 rounded-full bg-[#b7d8ef]" />
+            <div className="flex items-center gap-1.5 pt-2">
+              <button
+                type="button"
+                onClick={loginAsAmmu}
+                disabled={!isSafe}
+                aria-label="Open first study space"
+                title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'}
+                className={`text-2xl leading-none transition-all sm:text-3xl ${
+                  isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'
+                }`}
+              >
+                {'😊'}
+              </button>
+              <button
+                type="button"
+                onClick={loginAsVishwa}
+                disabled={!isSafe}
+                aria-label="Open second study space"
+                title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'}
+                className={`text-2xl leading-none transition-all sm:text-3xl ${
+                  isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'
+                }`}
+              >
+                {'😊'}
+              </button>
+            </div>
+            <div className="absolute -right-3 top-5 h-8 w-5 rounded-r-full border-2 border-l-0 border-[#aec9dd]" />
+          </div>
+        </div>
+
+        {/* Small blue book stack on the left */}
+        <div className="pointer-events-none absolute bottom-[8%] left-[-0.5rem] z-0 hidden w-44 rotate-[-3deg] space-y-1 sm:block">
+          {['Accounting', 'Law', 'Taxation', 'Audit'].map((label, index) => (
+            <div
+              key={label}
+              className={`h-8 rounded-r-md border border-white/40 px-3 py-1 font-serif text-sm italic text-white shadow-sm ${
+                index % 2 === 0 ? 'bg-[#3978b7]' : 'bg-[#5b91c1]'
+              }`}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+
+        {/* Pin/Pencil control remains in its existing position and behavior */}
         <button
           onClick={toggleSafety}
           disabled={safetyLoading}
-          className="fixed bottom-8 left-6 sm:bottom-10 sm:left-10 z-50 transition-transform duration-150 active:scale-95"
-          title={isSafe ? 'Pencil — unlocked (smileys clickable)' : 'Pin — locked (smileys blocked)'}
+          className="fixed bottom-6 left-5 z-50 rounded-full p-2 text-2xl transition-transform duration-150 hover:scale-110 active:scale-95 sm:bottom-8 sm:left-10"
+          title={isSafe ? 'Pencil — unlocked' : 'Pin — locked'}
         >
-          {isSafe ? (
-            <span className="text-3xl drop-shadow-md">📝</span>
-          ) : (
-            <span className="text-3xl drop-shadow-md">📌</span>
-          )}
+          {isSafe ? '📝' : '📌'}
         </button>
 
-        {/* 🔲 Login Card — styled like a desk notebook */}
-        <div
-          className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 w-full max-w-md
-                     border border-amber-200 relative z-10"
-        >
-          <div className="text-center mb-6">
-            <h1
-              className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600
-                           bg-clip-text text-transparent mb-2"
-            >
-              CA Study Portal
-            </h1>
-            <p className="text-gray-600 text-sm">
-              Your AI mentor is here to guide you on your journey to becoming a Chartered Accountant
-            </p>
+        {/* Centered reference-style login content */}
+        <main className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
+          <div className="mb-3 text-7xl leading-none drop-shadow-sm sm:text-8xl">CA</div>
+          <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">
+            CA Prep Hub
+          </h1>
+          <div className="mt-4 flex items-center gap-3 text-sm tracking-[0.22em] text-[#38638d] sm:text-base">
+            <span>Learn</span>
+            <span>•</span>
+            <span>Practice</span>
+            <span>•</span>
+            <span>Prepare</span>
+            <span>•</span>
+            <span>Achieve</span>
           </div>
-
-          {/* ☕ Coffee Mug with Smileys */}
-          <div className="relative flex justify-center mb-6">
-            <div className="relative">
-              {/* Pens & pencils sticking out of the mug */}
-              <div className="absolute -top-5 left-3 text-2xl rotate-12 select-none">✏️</div>
-              <div className="absolute -top-4 left-10 text-lg rotate-[-25deg] select-none">🖊️</div>
-              <div className="absolute -top-6 left-16 text-xl rotate-[30deg] select-none">📝</div>
-              <div className="absolute -top-4 right-8 text-lg rotate-[-15deg] select-none">📏</div>
-
-              {/* Mug body */}
-              <div className="relative bg-gradient-to-b from-amber-100 to-amber-200 rounded-b-[2rem] rounded-t-xl px-8 py-5 shadow-lg border-2 border-amber-300/60">
-                {/* Mug handle */}
-                <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-7 h-10 border-4 border-amber-300/60 rounded-r-full"></div>
-
-                {/* Smileys inside the mug */}
-                <div className="flex gap-5 items-end justify-center">
-                  {/* Left smiley — Ammu */}
-                  <button
-                    onClick={loginAsAmmu}
-                    disabled={!isSafe}
-                    className={`flex flex-col items-center transition-all duration-200 ${
-                      isSafe
-                        ? 'cursor-pointer hover:scale-110 active:scale-95'
-                        : 'opacity-40 cursor-not-allowed'
-                    }`}
-                    title={isSafe ? 'Login as Ammu' : 'Locked — toggle pin to pencil'}
-                  >
-                    <span
-                      className={`text-4xl leading-none transition-all ${
-                        isSafe ? 'drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'grayscale'
-                      }`}
-                    >
-                      {'😊'}
-                    </span>
-                    <span
-                      className={`text-xs font-medium mt-1 transition-colors ${
-                        isSafe ? 'text-green-600' : 'text-gray-400'
-                      }`}
-                    >
-                      Ammu
-                    </span>
-                  </button>
-
-                  {/* Right smiley — Vishwa */}
-                  <button
-                    onClick={loginAsVishwa}
-                    disabled={!isSafe}
-                    className={`flex flex-col items-center transition-all duration-200 ${
-                      isSafe
-                        ? 'cursor-pointer hover:scale-110 active:scale-95'
-                        : 'opacity-40 cursor-not-allowed'
-                    }`}
-                    title={isSafe ? 'Login as Vishwa' : 'Locked — toggle pin to pencil'}
-                  >
-                    <span
-                      className={`text-4xl leading-none transition-all ${
-                        isSafe ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'grayscale'
-                      }`}
-                    >
-                      {'😊'}
-                    </span>
-                    <span
-                      className={`text-xs font-medium mt-1 transition-colors ${
-                        isSafe ? 'text-blue-600' : 'text-gray-400'
-                      }`}
-                    >
-                      Vishwa
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="my-4 flex w-56 items-center gap-3 text-[#2865a0]">
+            <span className="h-px flex-1 bg-[#6d9ec6]/60" />
+            <span className="text-lg">♥</span>
+            <span className="h-px flex-1 bg-[#6d9ec6]/60" />
           </div>
+          <p className="font-serif text-base italic text-[#527399] sm:text-lg">Your CA journey starts here ♡</p>
 
-          {/* 📝 Name Input */}
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-gray-700 font-medium mb-2">Enter your name</label>
-              <input
-                type="text"
-                value={inputNickname}
-                onChange={(e) => setInputNickname(e.target.value)}
-                onFocus={() => {
-                  if (isSafe && !safetyLoading) toggleSafety();
-                }}
-                className="w-full px-4 py-3 rounded-2xl border border-amber-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
-                placeholder="Enter your name..."
-                required
-              />
-            </div>
-
+          <form onSubmit={handleLogin} className="mt-8 flex w-full max-w-sm flex-col items-center gap-5 sm:mt-10">
+            <label className="sr-only" htmlFor="login-name">Enter your name</label>
+            <input
+              id="login-name"
+              type="text"
+              value={inputNickname}
+              onChange={(e) => setInputNickname(e.target.value)}
+              onFocus={() => {
+                if (isSafe && !safetyLoading) toggleSafety();
+              }}
+              className="h-14 w-full rounded-full border border-[#7da9cb] bg-white/75 px-6 text-base text-[#244f78] shadow-[0_5px_14px_rgba(62,112,157,0.13)] outline-none placeholder:text-[#8ca3b9] focus:border-[#397ec0] focus:ring-4 focus:ring-[#8fc1e8]/40"
+              placeholder="Enter your name..."
+              required
+            />
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-medium hover:from-amber-600 hover:to-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="flex h-14 w-44 items-center justify-center gap-3 rounded-full bg-[#3d83c7] text-lg font-semibold text-white shadow-[0_7px_14px_rgba(41,103,164,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#2f73b5] hover:shadow-lg active:translate-y-0"
             >
-              Start Study Session 📚
+              Enter <span aria-hidden="true" className="text-2xl leading-none">→</span>
             </button>
           </form>
+        </main>
+
+        {/* Desk edge and notebook details */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[17%] border-t border-[#e8ddc8] bg-[#f5efe5]/90 sm:h-[15%]" />
+        <div className="pointer-events-none absolute bottom-[3%] right-[9%] hidden rotate-[-7deg] font-serif text-sm italic text-[#56799b] sm:block">
+          To do: ♡
+          <br />
+          □ study&nbsp;&nbsp; □ practice
         </div>
+        <div className="pointer-events-none absolute bottom-[5%] right-[18%] hidden h-2 w-32 rotate-[-18deg] rounded-full bg-[#2d6fae] shadow-sm sm:block" />
       </div>
     );
   }
