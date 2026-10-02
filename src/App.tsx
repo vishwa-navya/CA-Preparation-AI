@@ -280,12 +280,12 @@ function App() {
         {/* Illustrated CA logo: cap, curved C, arrow-chart A */}
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
           <svg viewBox="0 0 210 150" className="mb-1 h-28 w-36 text-[#174c87] drop-shadow-sm sm:h-36 sm:w-48" role="img" aria-label="CA education logo">
-            <path d="M64 25L91 9h42l-25 20H71z" fill="currentColor" />
-            <path d="M77 26v21M120 26v18" stroke="currentColor" strokeWidth="4" />
-            <path d="M73 45c-18-13-43-5-43 31 0 40 40 48 66 24" fill="none" stroke="currentColor" strokeWidth="11" strokeLinecap="round" />
-            <path d="M92 106l31-79 35 79M105 78h35" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M111 111h40M123 100v-14M134 100V76M145 100V64" fill="none" stroke="currentColor" strokeWidth="7" />
-            <path d="M92 110c22 10 48 6 69-4M150 43l16-13M166 30l-4 16M166 30l-14 2" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M47 27 82 7h57l-26 21H67z" fill="currentColor" />
+            <path d="M70 28v25M119 28v17M49 27l-2 17M47 44l-8 12" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+            <path d="M75 48C54 31 26 43 26 78c0 40 39 55 72 30" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+            <path d="M93 111 125 27l39 84M108 80h36" fill="none" stroke="currentColor" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M113 113h53M123 103V91M135 103V75M147 103V62" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+            <path d="M96 115c24 9 52 6 72-6M125 49l43-27M168 22l-5 18M168 22l-17 3" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">CA Prep Hub</h1>
           <div className="mt-4 flex items-center gap-3 text-sm tracking-[0.22em] text-[#38638d] sm:text-base">
@@ -337,8 +337,8 @@ function App() {
           <div className="relative h-20 w-20 rounded-b-2xl rounded-t-md border-2 border-[#9cb8cb] bg-[#f7fbff] shadow-[0_8px_12px_rgba(52,95,126,0.18)]">
             <div className="absolute inset-x-2 top-2 h-2 rounded-full bg-[#d6e9f5]" />
             <div className="flex h-full items-center justify-center gap-1 pt-2">
-              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>{'😊'}</button>
-              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>{'😊'}</button>
+              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
+              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
             </div>
             <div className="absolute -left-3 top-5 h-8 w-5 rounded-l-full border-2 border-r-0 border-[#9cb8cb]" />
           </div>
