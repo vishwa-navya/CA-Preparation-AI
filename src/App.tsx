@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { useState, useEffect, Component, ReactNode } from 'react';
-import { Heart, BookOpen, Check, X, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import Chat1 from './pages/Chat1';
 import Chat2 from './pages/Chat2';
 import Chat3 from './pages/Chat3';
@@ -145,9 +145,9 @@ function App() {
   }, []);
 
   // 🔐 Handle Login — manual name entry ALWAYS goes to Chat1.
-  // The only way to reach Chat2 is by clicking a book icon.
-  // On manual login, auto-switch safety OFF (injection) so the book
-  // icons are blocked until the user manually toggles back to stethoscope.
+  // The only way to reach Chat2 is by clicking a smiley emoji.
+  // On manual login, auto-switch to pin (locked) so the smileys
+  // are blocked until the user manually toggles back to pencil.
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedNickname = inputNickname.trim().toLowerCase();
@@ -168,9 +168,9 @@ function App() {
     setCurrentPage('chat1');
   };
 
-  // Quick login buttons (books) — auto-switch stethoscope → injection
-  // immediately after clicking a book icon, for extra safety. This blocks
-  // the other book icon until someone manually toggles back to stethoscope.
+  // Quick login buttons (smileys) — auto-switch pencil → pin
+  // immediately after clicking a smiley, for extra safety. This blocks
+  // the other smiley until someone manually toggles back to pencil.
   const loginAsVishwa = () => {
     if (!isSafe) return; // blocked
     setNickname('Vishwa');
@@ -203,90 +203,133 @@ function App() {
   const handleSwitchToChat3 = () => setCurrentPage('chat3');
   const handleOpenMemory = () => setCurrentPage('memory');
 
-  // 🧭 LOGIN PAGE
+  // 🧭 LOGIN PAGE — CA Study Desk Theme
   if (currentPage === 'login') {
     return (
       <div
-        className="w-full bg-gradient-to-br from-pink-50 via-rose-50 to-red-50
+        className="w-full bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50
                    flex items-center justify-center p-4 relative overflow-hidden"
         style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
       >
-        {/* Floating Emojis */}
+        {/* Floating Stationery Emojis */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-10 left-4 text-blue-200 text-3xl md:text-4xl animate-pulse">
-            🩺
-          </div>
-          <div className="absolute top-32 right-4 text-green-200 text-2xl md:text-3xl animate-bounce">
-            👨‍⚕️
-          </div>
-          <div className="absolute bottom-32 left-8 text-purple-300 text-4xl md:text-5xl animate-pulse">
-            🩺
-          </div>
-          <div className="absolute bottom-16 right-4 text-indigo-300 text-xl md:text-2xl animate-bounce">
-            👩‍⚕️
-          </div>
-          <div className="hidden sm:block absolute top-1/2 left-1/4 text-teal-300 text-2xl md:text-3xl animate-pulse">
-            🩺
-          </div>
-          <div className="hidden sm:block absolute top-60 right-10 text-pink-300 text-xl md:text-2xl animate-bounce">
-            👨‍⚕️
-          </div>
+          <div className="absolute top-10 left-4 text-amber-200 text-3xl md:text-4xl animate-pulse">📚</div>
+          <div className="absolute top-32 right-4 text-orange-200 text-2xl md:text-3xl animate-bounce">✏️</div>
+          <div className="absolute bottom-32 left-8 text-yellow-300 text-4xl md:text-5xl animate-pulse">📝</div>
+          <div className="absolute bottom-16 right-4 text-amber-300 text-xl md:text-2xl animate-bounce">🖊️</div>
+          <div className="hidden sm:block absolute top-1/2 left-1/4 text-orange-200 text-2xl md:text-3xl animate-pulse">📎</div>
+          <div className="hidden sm:block absolute top-60 right-10 text-amber-200 text-xl md:text-2xl animate-bounce">📏</div>
         </div>
 
-        {/* ✅ Safety Toggle Button (plain icon only) */}
+        {/* 🔒 Pin/Pencil Toggle Button (bottom-left corner) */}
         <button
           onClick={toggleSafety}
           disabled={safetyLoading}
           className="fixed bottom-8 left-6 sm:bottom-10 sm:left-10 z-50 transition-transform duration-150 active:scale-95"
-          title={isSafe ? 'Tick — normal (Chat2/Chat3 allowed)' : 'Cross — blocked (only Chat1)'}
+          title={isSafe ? 'Pencil — unlocked (smileys clickable)' : 'Pin — locked (smileys blocked)'}
         >
-         {isSafe ? (
-  <span className="text-2xl">🩺</span> // ✅ Tick → Stethoscope emoji
-) : (
-  <span className="text-2xl">💉</span> // ❌ Cross → Injection emoji
-)}
-
+          {isSafe ? (
+            <span className="text-3xl drop-shadow-md">📝</span>
+          ) : (
+            <span className="text-3xl drop-shadow-md">📌</span>
+          )}
         </button>
 
-        {/* 🔲 Login Box */}
+        {/* 🔲 Login Card — styled like a desk notebook */}
         <div
-          className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 w-full max-w-md 
-                     border border-pink-200 relative z-10"
+          className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 w-full max-w-md
+                     border border-amber-200 relative z-10"
         >
-          <div className="text-center mb-8">
-            {/* 📚 Book Icons */}
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <BookOpen
-                onClick={loginAsAmmu}
-                className={`w-8 h-8 text-green-500 m-1 transition-all ${
-                  isSafe ? 'cursor-pointer hover:scale-110' : 'opacity-50 cursor-not-allowed'
-                }`}
-                title={isSafe ? 'Login as Ammu' : 'Blocked - Safety active'}
-              />
-              <BookOpen
-                onClick={loginAsVishwa}
-                className={`w-8 h-8 text-blue-500 m-1 transition-all ${
-                  isSafe ? 'cursor-pointer hover:scale-110' : 'opacity-50 cursor-not-allowed'
-                }`}
-                title={isSafe ? 'Login as Vishwa' : 'Blocked - Safety active'}
-              />
-            </div>
-
+          <div className="text-center mb-6">
             <h1
-              className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 
+              className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600
                            bg-clip-text text-transparent mb-2"
             >
-              Doctors Study Portal
+              CA Study Portal
             </h1>
-            <p className="text-gray-600">
-              Your AI teacher is here to guide you on your journey to becoming a doctor
+            <p className="text-gray-600 text-sm">
+              Your AI mentor is here to guide you on your journey to becoming a Chartered Accountant
             </p>
           </div>
 
-          {/* 🧑‍⚕️ Name Input */}
+          {/* ☕ Coffee Mug with Smileys */}
+          <div className="relative flex justify-center mb-6">
+            <div className="relative">
+              {/* Pens & pencils sticking out of the mug */}
+              <div className="absolute -top-5 left-3 text-2xl rotate-12 select-none">✏️</div>
+              <div className="absolute -top-4 left-10 text-lg rotate-[-25deg] select-none">🖊️</div>
+              <div className="absolute -top-6 left-16 text-xl rotate-[30deg] select-none">📝</div>
+              <div className="absolute -top-4 right-8 text-lg rotate-[-15deg] select-none">📏</div>
+
+              {/* Mug body */}
+              <div className="relative bg-gradient-to-b from-amber-100 to-amber-200 rounded-b-[2rem] rounded-t-xl px-8 py-5 shadow-lg border-2 border-amber-300/60">
+                {/* Mug handle */}
+                <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-7 h-10 border-4 border-amber-300/60 rounded-r-full"></div>
+
+                {/* Smileys inside the mug */}
+                <div className="flex gap-5 items-end justify-center">
+                  {/* Left smiley — Ammu */}
+                  <button
+                    onClick={loginAsAmmu}
+                    disabled={!isSafe}
+                    className={`flex flex-col items-center transition-all duration-200 ${
+                      isSafe
+                        ? 'cursor-pointer hover:scale-110 active:scale-95'
+                        : 'opacity-40 cursor-not-allowed'
+                    }`}
+                    title={isSafe ? 'Login as Ammu' : 'Locked — toggle pin to pencil'}
+                  >
+                    <span
+                      className={`text-4xl leading-none transition-all ${
+                        isSafe ? 'drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'grayscale'
+                      }`}
+                    >
+                      {'😊'}
+                    </span>
+                    <span
+                      className={`text-xs font-medium mt-1 transition-colors ${
+                        isSafe ? 'text-green-600' : 'text-gray-400'
+                      }`
+                    >
+                      Ammu
+                    </span>
+                  </button>
+
+                  {/* Right smiley — Vishwa */}
+                  <button
+                    onClick={loginAsVishwa}
+                    disabled={!isSafe}
+                    className={`flex flex-col items-center transition-all duration-200 ${
+                      isSafe
+                        ? 'cursor-pointer hover:scale-110 active:scale-95'
+                        : 'opacity-40 cursor-not-allowed'
+                    }`}
+                    title={isSafe ? 'Login as Vishwa' : 'Locked — toggle pin to pencil'}
+                  >
+                    <span
+                      className={`text-4xl leading-none transition-all ${
+                        isSafe ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'grayscale'
+                      }`}
+                    >
+                      {'😊'}
+                    </span>
+                    <span
+                      className={`text-xs font-medium mt-1 transition-colors ${
+                        isSafe ? 'text-blue-600' : 'text-gray-400'
+                      }`
+                    >
+                      Vishwa
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 📝 Name Input */}
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <label className="block text-gray-700 font-medium mb-2">Enter your name doctor</label>
+              <label className="block text-gray-700 font-medium mb-2">Enter your name</label>
               <input
                 type="text"
                 value={inputNickname}
@@ -294,7 +337,7 @@ function App() {
                 onFocus={() => {
                   if (isSafe && !safetyLoading) toggleSafety();
                 }}
-                className="w-full px-4 py-3 rounded-2xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                className="w-full px-4 py-3 rounded-2xl border border-amber-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
                 placeholder="Enter your name..."
                 required
               />
@@ -302,7 +345,7 @@ function App() {
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-green-500 text-white py-3 rounded-2xl font-medium hover:from-blue-600 hover:to-green-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-2xl font-medium hover:from-amber-600 hover:to-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               Start Study Session 📚
             </button>
