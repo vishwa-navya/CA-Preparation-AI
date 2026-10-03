@@ -279,14 +279,7 @@ function App() {
 
         {/* Illustrated CA logo: cap, curved C, arrow-chart A */}
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
-          <svg viewBox="0 0 210 150" className="mb-1 h-28 w-36 text-[#174c87] drop-shadow-sm sm:h-36 sm:w-48" role="img" aria-label="CA education logo">
-            <path d="M47 27 82 7h57l-26 21H67z" fill="currentColor" />
-            <path d="M70 28v25M119 28v17M49 27l-2 17M47 44l-8 12" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-            <path d="M75 48C54 31 26 43 26 78c0 40 39 55 72 30" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-            <path d="M93 111 125 27l39 84M108 80h36" fill="none" stroke="currentColor" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M113 113h53M123 103V91M135 103V75M147 103V62" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
-            <path d="M96 115c24 9 52 6 72-6M125 49l43-27M168 22l-5 18M168 22l-17 3" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <img src="/image.png" className="mb-1 h-28 w-36 object-contain drop-shadow-sm sm:h-36 sm:w-48" alt="Chartered Accountant logo" />
           <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">CA Prep Hub</h1>
           <div className="mt-4 flex items-center gap-3 text-sm tracking-[0.22em] text-[#38638d] sm:text-base">
             <span>Learn</span><span>•</span><span>Practice</span><span>•</span><span>Prepare</span><span>•</span><span>Achieve</span>
