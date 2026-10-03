@@ -279,7 +279,11 @@ function App() {
 
         {/* Illustrated CA logo: cap, curved C, arrow-chart A */}
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
-          <img src="/image.png" className="mb-1 h-28 w-36 object-contain drop-shadow-sm sm:h-36 sm:w-48" alt="Chartered Accountant logo" />
+          <img
+  src="/image.png"
+  className="mb-1 h-40 w-52 object-contain drop-shadow-sm sm:h-48 sm:w-64"
+  alt="Chartered Accountant logo"
+/>
           <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">CA Prep Hub</h1>
           <div className="mt-4 flex items-center gap-3 text-sm tracking-[0.22em] text-[#38638d] sm:text-base">
             <span>Learn</span><span>•</span><span>Practice</span><span>•</span><span>Prepare</span><span>•</span><span>Achieve</span>
