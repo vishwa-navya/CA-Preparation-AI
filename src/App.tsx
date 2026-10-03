@@ -334,13 +334,13 @@ function App() {
           □ revise
         </div>
         <div className="absolute bottom-[11%] right-4 z-30 flex scale-75 flex-col items-center sm:bottom-[13%] sm:right-[7%] sm:scale-100">
-          <div className="relative h-20 w-20 rounded-b-2xl rounded-t-md border-2 border-[#9cb8cb] bg-[#f7fbff] shadow-[0_8px_12px_rgba(52,95,126,0.18)]">
-            <div className="absolute inset-x-2 top-2 h-2 rounded-full bg-[#d6e9f5]" />
-            <div className="flex h-full items-center justify-center gap-1 pt-2">
-              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
-              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-sm leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
+          <div className="relative h-16 w-14 rounded-b-[1.15rem] rounded-t-[0.6rem] border-2 border-[#9cb8cb] bg-[#f7fbff] shadow-[0_8px_12px_rgba(52,95,126,0.18)]">
+            <div className="absolute -top-1 left-1/2 h-3 w-11 -translate-x-1/2 rounded-[50%] border-2 border-[#9cb8cb] bg-[#c9dce8]" />
+            <div className="relative z-10 flex h-full items-center justify-center gap-0.5 pt-2">
+              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-[10px] leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
+              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-[10px] leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
             </div>
-            <div className="absolute -left-3 top-5 h-8 w-5 rounded-l-full border-2 border-r-0 border-[#9cb8cb]" />
+            <div className="absolute -right-4 top-4 h-7 w-5 rounded-r-full border-2 border-l-0 border-[#9cb8cb]" />
           </div>
         </div>
 
