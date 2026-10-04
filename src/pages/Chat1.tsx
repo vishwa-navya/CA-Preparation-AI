@@ -326,7 +326,7 @@ function Chat1({ nickname, onLogout }: Chat1Props) {
               </div>
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent truncate">
-                  B.Com Study Assistant
+                  CA Study Assistant
                 </h1>
                 <p className="text-xs text-gray-500 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-green-500" />
