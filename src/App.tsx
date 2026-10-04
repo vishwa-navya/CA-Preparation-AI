@@ -280,7 +280,7 @@ function App() {
         {/* Illustrated CA logo: cap, curved C, arrow-chart A */}
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
           <img
-  src="/image.png"
+  src="/ca-logo-transparent.png"
   className="mb-2 h-56 w-72 object-contain drop-shadow-sm sm:h-64 sm:w-80"
   alt="Chartered Accountant logo"
 />
