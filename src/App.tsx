@@ -281,7 +281,7 @@ function App() {
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
           <img
   src="/image.png"
-  className="mb-1 h-44 w-52 object-contain drop-shadow-sm sm:h-52 sm:w-64"
+  className="mb-2 h-56 w-72 object-contain drop-shadow-sm sm:h-64 sm:w-80"
   alt="Chartered Accountant logo"
 />
           <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">CA Prep Hub</h1>
@@ -333,9 +333,9 @@ function App() {
         <div className="absolute bottom-[11%] right-4 z-30 flex scale-75 flex-col items-center sm:bottom-[13%] sm:right-[7%] sm:scale-100">
           <div className="relative h-16 w-14 rounded-b-[1.15rem] rounded-t-[0.6rem] border-2 border-[#9cb8cb] bg-[#f7fbff] shadow-[0_8px_12px_rgba(52,95,126,0.18)]">
             <div className="absolute -top-1 left-1/2 h-3 w-11 -translate-x-1/2 rounded-[50%] border-2 border-[#9cb8cb] bg-[#c9dce8]" />
-            <div className="relative z-10 flex h-full items-center justify-center gap-1 pt-2">
-              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-[11px] font-semibold leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
-              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`text-[11px] font-semibold leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
+            <div className="relative z-10 flex h-full items-center justify-between px-1.5 pt-2">
+              <button type="button" onClick={loginAsAmmu} disabled={!isSafe} aria-label="Open first study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`w-5 text-center whitespace-nowrap text-[11px] font-semibold leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
+              <button type="button" onClick={loginAsVishwa} disabled={!isSafe} aria-label="Open second study space" title={isSafe ? 'Open study space' : 'Locked — toggle the pin to unlock'} className={`w-5 text-center whitespace-nowrap text-[11px] font-semibold leading-none transition-all ${isSafe ? 'hover:scale-110 active:scale-95' : 'grayscale opacity-40'}`}>: )</button>
             </div>
             <div className="absolute -right-4 top-4 h-7 w-5 rounded-r-full border-2 border-l-0 border-[#9cb8cb]" />
           </div>
