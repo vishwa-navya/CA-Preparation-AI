@@ -1132,7 +1132,7 @@ const processNotificationQueue = async () => {
 
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent truncate">
-                  AI Teacher
+                  CA Teacher
                 </h1>
                 <PresenceIndicator
                   isOnline={isOtherUserOnline}
@@ -1334,7 +1334,7 @@ const processNotificationQueue = async () => {
           className="fixed bottom-32 right-6 mb-4 bg-green-500 text-white p-3 rounded-full shadow-lg hover:bg-green-600 transition-all z-40"
           title="Scroll to latest message"
         >
-          💉
+          ✏️
         </button>
       )}
 
@@ -1589,11 +1589,12 @@ const processNotificationQueue = async () => {
       )}
 
       <div className={`fixed inset-0 pointer-events-none overflow-hidden transition-opacity duration-500 ${showKissRain || isReactorActive ? 'opacity-0' : 'opacity-100'}`}>
-        <div className="absolute top-20 left-10 text-blue-200 text-3xl animate-bounce">🩺</div>
-        <div className="absolute top-32 right-20 text-green-200 text-2xl animate-pulse">👨‍⚕️</div>
-        <div className="absolute bottom-40 left-32 text-purple-300 text-4xl animate-bounce">🩺</div>
-        <div className="absolute bottom-20 right-16 text-indigo-300 text-2xl animate-pulse">👩‍⚕️</div>
-        <div className="absolute top-60 right-32 text-pink-300 text-2xl animate-pulse">👨‍⚕️</div>
+            <div className="absolute top-20 left-5 text-green-200 text-2xl animate-bounce">📚</div>
+        <div className="absolute top-40 right-8 text-emerald-200 text-xl animate-pulse">✏️</div>
+        <div className="absolute bottom-32 left-12 text-teal-300 text-3xl animate-bounce">📖</div>
+        <div className="absolute top-60 right-20 text-green-300 text-2xl animate-pulse">💡</div>
+        <div className="absolute bottom-60 left-20 text-emerald-300 text-xl animate-bounce">📝</div>
+        <div className="absolute top-80 left-40 text-blue-300 text-2xl animate-pulse">🎓</div>
       </div>
 
       {process.env.NODE_ENV === 'development' && (
