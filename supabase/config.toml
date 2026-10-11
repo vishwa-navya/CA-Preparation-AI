@@ -1,0 +1,8 @@
+[functions.avatar-chat]
+verify_jwt = true
+
+[functions.schedule-photo]
+verify_jwt = false
+
+[functions.deliver-scheduled-photos]
+verify_jwt = true

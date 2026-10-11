@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile } from 'lucide-react';
+import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile, Clock3 } from 'lucide-react';
 import InstagramPlusButton from '../components/InstagramPlusButton';
 import MoodPicker from '../components/MoodPicker';
 import MoodDisplay from '../components/MoodDisplay';
@@ -38,6 +38,8 @@ import { VoiceMessagePreview } from '../components/VoiceMessagePreview';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import VoiceMessageInline from '../components/VoiceMessageInline';
 import CoupleMemoryPage from '../components/ui/CoupleMemoryPage';
+import SchedulePhotoModal from '../components/SchedulePhotoModal';
+import { schedulePhotoMessage } from '../lib/scheduledPhotos';
 import { createDownscaledPreview, createPreviewUrl, detectDeviceCapabilities } from '../lib/imageCompression';
 
 // ── NEW: Camera sharing imports ────────────────────────────────────────────────
@@ -91,6 +93,8 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
   const [showMoodPicker, setShowMoodPicker] = useState(false);
   const [replyToMood, setReplyToMood] = useState<{ emoji: string; partnerNickname: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showSchedulePhoto, setShowSchedulePhoto] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // ── Camera sharing state ──────────────────────────────────────────────────
   const [isCameraSharing, setIsCameraSharing] = useState(false);
@@ -668,6 +672,23 @@ const processNotificationQueue = async () => {
       } finally {
         setIsUploading(false);
       }
+    }
+  };
+
+  const handleScheduleImage = async (localDateTime: string) => {
+    if (!selectedImage || isUploading) return;
+    setIsUploading(true);
+    setScheduleError(null);
+    try {
+      await schedulePhotoMessage(selectedImage, nickname, localDateTime);
+      handleCancelImage();
+      setShowSchedulePhoto(false);
+      alert('Photo scheduled successfully.');
+    } catch (error) {
+      console.error('Photo scheduling failed:', error);
+      setScheduleError('Unable to schedule this photo. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1349,6 +1370,9 @@ const processNotificationQueue = async () => {
             </div>
             <img src={imagePreview} alt="Preview" className="w-full h-auto rounded-xl mb-4 max-h-64 object-cover" />
             <div className="flex gap-3">
+              <button type="button" onClick={() => { setScheduleError(null); setShowSchedulePhoto(true); }} disabled={isUploading} title="Schedule photo" className="rounded-xl border border-blue-200 px-3 py-2 text-blue-600 hover:bg-blue-50 disabled:opacity-50">
+                <Clock3 className="h-5 w-5" />
+              </button>
               <button onClick={handleCancelImage} className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={handleSendImage} disabled={isUploading} className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white">
                 {isUploading ? 'Sending...' : 'Send'}
@@ -1357,6 +1381,14 @@ const processNotificationQueue = async () => {
           </div>
         </div>
       )}
+
+      <SchedulePhotoModal
+        isOpen={showSchedulePhoto}
+        onClose={() => { if (!isUploading) { setShowSchedulePhoto(false); setScheduleError(null); } }}
+        onConfirm={handleScheduleImage}
+        isScheduling={isUploading}
+        error={scheduleError}
+      />
 
       <VideoPreviewModal
         videoFile={selectedVideo}
