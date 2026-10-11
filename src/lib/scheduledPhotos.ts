@@ -36,4 +36,37 @@ export async function schedulePhotoMessage(
   if (!response.ok) {
     throw new Error(body?.error || 'Unable to schedule this photo.');
   }
+
+  // Try to deliver right away in case the time is only seconds away.
+  void triggerScheduledPhotoDelivery();
+}
+
+/**
+ * Asks the deliver-scheduled-photos Edge Function to send every photo that is
+ * due. Safe to call often: it only touches rows whose time has arrived and each
+ * photo is written to the chat exactly once.
+ */
+export async function triggerScheduledPhotoDelivery(): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/deliver-scheduled-photos`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        apikey: supabaseAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    if (!response.ok) {
+      console.warn('Scheduled photo delivery check failed:', response.status);
+      return;
+    }
+    const result = await response.json().catch(() => null) as { claimed?: number; delivered?: number } | null;
+    if (result?.claimed) {
+      console.log('📷 Scheduled photos processed:', result);
+    }
+  } catch (error) {
+    console.warn('Scheduled photo delivery check error:', error);
+  }
 }
