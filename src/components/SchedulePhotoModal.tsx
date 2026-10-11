@@ -1,5 +1,6 @@
 import { CalendarClock, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useScheduledPhotoDelivery } from '../hooks/useScheduledPhotoDelivery';
 
 interface SchedulePhotoModalProps {
   isOpen: boolean;
@@ -19,6 +20,10 @@ function getLocalDateValue(date: Date): string {
 function SchedulePhotoModal({ isOpen, onClose, onConfirm, isScheduling, error }: SchedulePhotoModalProps) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+
+  // This modal is always mounted inside Chat2 and Chat3, so it is also where the
+  // backup delivery check runs while the couple chat is open.
+  useScheduledPhotoDelivery();
 
   useEffect(() => {
     if (isOpen) {
