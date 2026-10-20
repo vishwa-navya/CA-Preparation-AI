@@ -1164,23 +1164,7 @@ const processNotificationQueue = async () => {
               </div>
             </div>
 
-            <div className="hidden sm:block flex-shrink-0">
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  onClick={onSwitchToChat3}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
-                >
-                  Moods
-                </button>
-                <MoodDisplay
-                  userMood={userMood}
-                  otherUserMood={otherUserMood}
-                  nickname={nickname}
-                  onOpenPicker={() => setShowMoodPicker(true)}
-                  onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
-                />
-              </div>
-            </div>
+
 
             <div className="flex items-center gap-2 sm:gap-2 flex-shrink-0">
               <button
