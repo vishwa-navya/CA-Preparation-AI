@@ -10,6 +10,13 @@ const firebaseApiKey = "AIzaSyCJB10ot9q_6KpI_borDB987gZWuidX40I";
 const fireStoreUrl = "https://firestore.googleapis.com/v1/projects/vishwanavya-72a92/databases/(default)/documents/privateMessages";
 const notificationUrl = "https://notification-1-7zzu.onrender.com/send";
 
+// The Telegram notification server on Render's free plan sleeps and can take a
+// while to wake. The photo is delivered FIRST; the notification is best-effort
+// and is retried on later runs, so a cold start never delays or loses a photo.
+const NOTIFICATION_TIMEOUT_MS = 20_000;
+const NOTIFICATION_RETRY_WINDOW_MS = 30 * 60 * 1000;
+const NOTIFICATION_RETRY_BATCH = 5;
+
 type ScheduledPhoto = { id: string; sender_nickname: string; recipient_nickname: string; photo_url: string; file_name: string; attempts: number };
 const value = (stringValue: string) => ({ stringValue });
 const json = (body: unknown, status = 200) =>
@@ -39,13 +46,49 @@ async function deliver(row: ScheduledPhoto): Promise<void> {
     .eq("id", row.id)
     .eq("status", "processing");
   if (markError) console.error("could not mark scheduled photo as delivered", markError);
+}
 
+// Returns true when the notification server accepted the message.
+async function sendNotification(row: { id: string; sender_nickname: string; recipient_nickname: string }): Promise<boolean> {
   try {
-    await fetch(notificationUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: `📷 Scheduled photo delivered from ${row.sender_nickname} to ${row.recipient_nickname}` }) });
+    const response = await fetch(notificationUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: `📷 Scheduled photo delivered from ${row.sender_nickname} to ${row.recipient_nickname}` }),
+      signal: AbortSignal.timeout(NOTIFICATION_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Notification server returned ${response.status}`);
     await admin.from("scheduled_photo_messages").update({ notification_sent_at: new Date().toISOString() }).eq("id", row.id);
+    return true;
   } catch (error) {
-    console.error("scheduled photo notification failed", error);
+    console.error("scheduled photo notification failed (will retry)", error instanceof Error ? error.message : error);
+    return false;
   }
+}
+
+// Sends notifications for photos that were delivered but not yet notified, e.g.
+// because the Render notification server was still waking up. Stops at the first
+// failure so one sleeping server never stacks up long waits.
+async function sendPendingNotifications(): Promise<number> {
+  const since = new Date(Date.now() - NOTIFICATION_RETRY_WINDOW_MS).toISOString();
+  const { data, error } = await admin
+    .from("scheduled_photo_messages")
+    .select("id, sender_nickname, recipient_nickname")
+    .eq("status", "delivered")
+    .is("notification_sent_at", null)
+    .gte("delivered_at", since)
+    .order("delivered_at", { ascending: true })
+    .limit(NOTIFICATION_RETRY_BATCH);
+  if (error) {
+    console.error("could not load pending notifications", error);
+    return 0;
+  }
+  let sent = 0;
+  for (const row of data ?? []) {
+    if (!(await sendNotification(row))) break;
+    sent += 1;
+  }
+  return sent;
 }
 
 Deno.serve(async (req: Request) => {
@@ -53,7 +96,9 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: rows, error } = await admin.rpc("claim_due_scheduled_photos", { p_limit: 20 });
     if (error) throw error;
-    const results = { claimed: rows?.length ?? 0, delivered: 0, retried: 0, errors: [] as string[] };
+    const results = { claimed: rows?.length ?? 0, delivered: 0, retried: 0, notified: 0, errors: [] as string[] };
+
+    // 1) Deliver every due photo first — never wait on the notification server here.
     for (const row of (rows ?? []) as ScheduledPhoto[]) {
       try {
         await deliver(row);
@@ -73,6 +118,10 @@ Deno.serve(async (req: Request) => {
         results.retried += 1;
       }
     }
+
+    // 2) Then notify (also retries earlier notifications that missed a sleeping server).
+    results.notified = await sendPendingNotifications();
+
     return json(results);
   } catch (error) {
     console.error("deliver-scheduled-photos failed", error);
