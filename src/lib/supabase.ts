@@ -9,8 +9,8 @@ import {
 /* ===================================================
    SUPABASE CLIENT
 =================================================== */
-const supabaseUrl = 'https://mfbnotbpmmvisvicclji.supabase.co'
-const supabaseAnonKey =
+export const supabaseUrl = 'https://mfbnotbpmmvisvicclji.supabase.co'
+export const supabaseAnonKey =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mYm5vdGJwbW12aXN2aWNjbGppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MTcwNDEsImV4cCI6MjA2Nzk5MzA0MX0.JSJs-U570W56r0qfuwXY6kfhgXMwJrbb7FwbmXF_QJA'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
