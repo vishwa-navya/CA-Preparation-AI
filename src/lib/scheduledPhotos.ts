@@ -1,7 +1,19 @@
-import { uploadImageToSupabase } from './supabase';
+import { uploadImageToSupabase, supabaseUrl, supabaseAnonKey } from './supabase';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+// IMPORTANT: the Supabase URL and key come from supabase.ts (the same project the
+// photo upload uses). Do NOT read import.meta.env.VITE_SUPABASE_* here — if that
+// points at a different project than the upload, scheduling fails.
+
+function describeHttpFailure(status: number, serverMessage?: string): string {
+  if (status === 404) {
+    return 'Scheduling service not found. Deploy the "schedule-photo" Edge Function on this Supabase project.';
+  }
+  if (status === 401 || status === 403) {
+    return 'Scheduling service rejected the request. Turn "Verify JWT" OFF for schedule-photo and check the anon key.';
+  }
+  if (serverMessage) return serverMessage;
+  return `Unable to schedule this photo (error ${status}).`;
+}
 
 export async function schedulePhotoMessage(
   file: File,
@@ -13,28 +25,44 @@ export async function schedulePhotoMessage(
     throw new Error('Choose a future date and time.');
   }
 
+  // 1) Upload the photo to the chat-images bucket.
   const fileName = `${senderNickname}_${Date.now()}_${file.name || 'photo.jpg'}`;
-  const photoUrl = await uploadImageToSupabase(file, fileName);
-  const response = await fetch(`${supabaseUrl}/functions/v1/schedule-photo`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${supabaseAnonKey}`,
-      apikey: supabaseAnonKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      senderNickname,
-      recipientNickname: senderNickname === 'Ammu' ? 'Vishwa' : 'Ammu',
-      conversationName: 'privateMessages',
-      photoUrl,
-      fileName,
-      scheduledFor: scheduledDate.toISOString(),
-    }),
-  });
+  let photoUrl: string;
+  try {
+    photoUrl = await uploadImageToSupabase(file, fileName);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown error';
+    throw new Error(`Photo upload failed: ${reason}`);
+  }
+
+  // 2) Save the schedule on the server so it is sent even when both users are offline.
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseUrl}/functions/v1/schedule-photo`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        apikey: supabaseAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        senderNickname,
+        recipientNickname: senderNickname === 'Ammu' ? 'Vishwa' : 'Ammu',
+        conversationName: 'privateMessages',
+        photoUrl,
+        fileName,
+        scheduledFor: scheduledDate.toISOString(),
+      }),
+    });
+  } catch (error) {
+    console.error('schedule-photo network error:', error);
+    throw new Error('Could not reach the scheduling service. Check your internet connection and try again.');
+  }
 
   const body = await response.json().catch(() => null) as { error?: string } | null;
   if (!response.ok) {
-    throw new Error(body?.error || 'Unable to schedule this photo.');
+    console.error('schedule-photo failed:', response.status, body);
+    throw new Error(describeHttpFailure(response.status, body?.error));
   }
 
   // Try to deliver right away in case the time is only seconds away.
