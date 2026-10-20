@@ -596,7 +596,7 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
       alert('Photo scheduled successfully.');
     } catch (error) {
       console.error('Photo scheduling failed:', error);
-      setScheduleError('Unable to schedule this photo. Please try again.');
+      setScheduleError(error instanceof Error && error.message ? error.message : 'Unable to schedule this photo. Please try again.');
     } finally {
       setIsUploading(false);
     }
