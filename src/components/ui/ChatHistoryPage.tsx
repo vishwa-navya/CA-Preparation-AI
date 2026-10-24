@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, ReactNode } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Component, ReactNode } from 'react';
 import { X, ChevronLeft, MessageCircle, Heart, AlertCircle } from 'lucide-react';
 import { collection, query, where, orderBy, getDocs, Timestamp, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -41,20 +41,101 @@ interface MessageData {
   seenBy?: string[];
 }
 
-const MONTHS = [
-  { label: 'July 2025', value: '2025-07' },
-  { label: 'August 2025', value: '2025-08' },
-  { label: 'September 2025', value: '2025-09' },
-  { label: 'October 2025', value: '2025-10' },
-  { label: 'November 2025', value: '2025-11' },
-  { label: 'December 2025', value: '2025-12' },
-  { label: 'January 2026', value: '2026-01' },
-  { label: 'February 2026', value: '2026-02' },
-  { label: 'March 2026', value: '2026-03' },
-  { label: 'April 2026', value: '2026-04' },
-  { label: 'May 2026', value: '2026-05' },
-  { label: 'June 2026', value: '2026-06' },
-];
+// ── Chat history range ───────────────────────────────────────────────────────
+// History starts in July 2025 and always runs up to YESTERDAY. Nothing needs to
+// be edited as time passes: months and days appear by themselves, and a day is
+// added to the history as soon as it is over (right after midnight).
+const HISTORY_START = { year: 2025, month: 7 }; // July 2025 (month is 1-12)
+// Set to true if you also want today's messages inside Chat History.
+const INCLUDE_TODAY = false;
+
+interface MonthOption {
+  label: string;
+  value: string; // 'YYYY-MM'
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function endOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+// The most recent day that is allowed to appear in the history.
+function getLastVisibleDay(now: Date): Date {
+  const today = startOfDay(now);
+  if (INCLUDE_TODAY) return today;
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+}
+
+// Every month from HISTORY_START up to the month of the last visible day.
+function buildMonths(lastDay: Date): MonthOption[] {
+  const months: MonthOption[] = [];
+  let year = HISTORY_START.year;
+  let month = HISTORY_START.month;
+  const lastYear = lastDay.getFullYear();
+  const lastMonth = lastDay.getMonth() + 1;
+  while (year < lastYear || (year === lastYear && month <= lastMonth)) {
+    months.push({
+      label: new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      value: `${year}-${String(month).padStart(2, '0')}`,
+    });
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return months;
+}
+
+function getDayKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+// Returns a value that changes when the calendar day changes, so the history
+// refreshes by itself — at midnight, or when the app is reopened the next day.
+function useDayKey(): string {
+  const [dayKey, setDayKey] = useState(() => getDayKey(new Date()));
+
+  useEffect(() => {
+    let timer: number | undefined;
+
+    const refresh = () => {
+      const next = getDayKey(new Date());
+      setDayKey((prev) => (prev === next ? prev : next));
+    };
+
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      // 5 seconds after midnight, to be safely on the new day
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
+      timer = window.setTimeout(() => {
+        refresh();
+        scheduleMidnightRefresh();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    // Phones pause timers while the app is in the background, so also re-check
+    // whenever the app comes back to the foreground.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    scheduleMidnightRefresh();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refresh);
+
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
+  return dayKey;
+}
 
 function getDaysInMonth(monthValue: string): number {
   const [year, month] = monthValue.split('-').map(Number);
@@ -83,6 +164,13 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
   const [monthsWithMessages, setMonthsWithMessages] = useState<Set<string>>(new Set());
   const [datesWithMessages, setDatesWithMessages] = useState<Set<number>>(new Set());
   const [initLoading, setInitLoading] = useState(true);
+  const hasLoadedMonthsRef = useRef(false);
+
+  // Changes at midnight, which re-runs the month/day checks below automatically.
+  const dayKey = useDayKey();
+  const lastDay = useMemo(() => getLastVisibleDay(new Date()), [dayKey]);
+  const lastDayEnd = useMemo(() => endOfDay(lastDay), [lastDay]);
+  const months = useMemo(() => buildMonths(lastDay), [lastDay]);
 
   // Read-only presence for the other user — no writing, no heartbeat, no conflict with Chat2
 
@@ -96,16 +184,19 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
     // so the flag stays active until the user explicitly closes Chat History.
   }, []);
 
-  // Detect months that have at least one message — all 12 queries fire in parallel
+  // Detect months that have at least one message — all queries fire in parallel.
+  // Only finished days count: the last month is cut off at yesterday.
   useEffect(() => {
     const checkMonths = async () => {
-      setInitLoading(true);
+      // Show the spinner only the first time; later refreshes (new day) are silent
+      if (!hasLoadedMonthsRef.current) setInitLoading(true);
       try {
         const results = await Promise.all(
-          MONTHS.map(async (month) => {
+          months.map(async (month) => {
             const [year, mon] = month.value.split('-').map(Number);
-            const start = new Date(year, mon - 1, 1, 0, 0, 0);
-            const end   = new Date(year, mon,     0, 23, 59, 59);
+            const start = new Date(year, mon - 1, 1, 0, 0, 0, 0);
+            const monthEnd = new Date(year, mon, 0, 23, 59, 59, 999);
+            const end = monthEnd.getTime() > lastDayEnd.getTime() ? lastDayEnd : monthEnd;
             const q = query(
               collection(db, 'privateMessages'),
               where('ts', '>=', Timestamp.fromDate(start)),
@@ -122,6 +213,7 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
           })
         );
         setMonthsWithMessages(new Set(results.filter(Boolean) as string[]));
+        hasLoadedMonthsRef.current = true;
       } catch (err) {
         console.error('ChatHistory: months check error:', err);
       } finally {
@@ -129,7 +221,7 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
       }
     };
     checkMonths();
-  }, []);
+  }, [months, lastDayEnd]);
 
   // Detect which dates in the selected month have messages.
   // Uses parallel per-day limit(1) queries — same pattern as month detection.
@@ -142,10 +234,16 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
       try {
         const [year, mon] = selectedMonth.split('-').map(Number);
         const daysInMonth = new Date(year, mon, 0).getDate();
+        // Never look past the last visible day (yesterday): saves reads and keeps today out
+        const lastDayInMonth =
+          year === lastDay.getFullYear() && mon - 1 === lastDay.getMonth()
+            ? lastDay.getDate()
+            : daysInMonth;
+        const daysToCheck = Math.min(daysInMonth, lastDayInMonth);
         const results = await Promise.all(
-          Array.from({ length: daysInMonth }, (_, i) => i + 1).map(async (day) => {
-            const start = new Date(year, mon - 1, day, 0, 0, 0);
-            const end   = new Date(year, mon - 1, day, 23, 59, 59);
+          Array.from({ length: daysToCheck }, (_, i) => i + 1).map(async (day) => {
+            const start = new Date(year, mon - 1, day, 0, 0, 0, 0);
+            const end   = new Date(year, mon - 1, day, 23, 59, 59, 999);
             const q = query(
               collection(db, 'privateMessages'),
               where('ts', '>=', Timestamp.fromDate(start)),
@@ -169,7 +267,7 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
       }
     };
     checkDates();
-  }, [selectedMonth]);
+  }, [selectedMonth, lastDay]);
 
   // Fetch ALL messages for a specific date
   // NOTE: No deletedFor filter here — Chat History shows the full historical record
@@ -180,8 +278,8 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
       setLoading(true);
       try {
         const [year, mon] = selectedMonth.split('-').map(Number);
-        const start = new Date(year, mon - 1, selectedDate, 0, 0, 0);
-        const end = new Date(year, mon - 1, selectedDate, 23, 59, 59);
+        const start = new Date(year, mon - 1, selectedDate, 0, 0, 0, 0);
+        const end = new Date(year, mon - 1, selectedDate, 23, 59, 59, 999);
         const q = query(
           collection(db, 'privateMessages'),
           where('ts', '>=', Timestamp.fromDate(start)),
@@ -232,7 +330,7 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
   const ordinal = (n: number) =>
     n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
 
-  const selectedMonthLabel = MONTHS.find(m => m.value === selectedMonth)?.label ?? '';
+  const selectedMonthLabel = months.find(m => m.value === selectedMonth)?.label ?? '';
 
   const getHeaderTitle = () => {
     if (currentView === 'months') return 'Chat History';
@@ -250,7 +348,7 @@ function ChatHistoryPage({ nickname, memoriesNotif, onExit }: ChatHistoryPagePro
         </div>
       ) : (
         <div className="max-w-md mx-auto grid grid-cols-2 gap-3">
-          {MONTHS.map((month) => {
+          {months.map((month) => {
             const has = monthsWithMessages.has(month.value);
             return (
               <button
