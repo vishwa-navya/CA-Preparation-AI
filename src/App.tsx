@@ -279,11 +279,21 @@ function App() {
 
         {/* Illustrated CA logo: cap, curved C, arrow-chart A */}
         <div className="relative z-20 mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-5 pb-[18%] pt-10 text-center sm:pb-[13%]">
-          <img
-  src="/ca-logo-crop.png"
-  className="mb-2 h-56 w-72 object-contain drop-shadow-sm sm:h-64 sm:w-80"
-  alt="Chartered Accountant logo"
-/>
+          {/* Full CA logo (cap + CA mark + "CHARTERED ACCOUNTANT"), transparent so the page
+              background color shows through. The wide image has empty space on both sides,
+              so it is cropped to the logo with CSS only (no new image file needed).
+              To change the logo size, change the width classes below (w-56 / sm:w-72). */}
+          <div
+            className="relative mb-3 w-56 max-w-[85vw] shrink-0 overflow-hidden sm:w-72"
+            style={{ aspectRatio: '444 / 274' }}
+          >
+            <img
+              src="/ca-logo-transparent.png"
+              alt="Chartered Accountant logo"
+              className="absolute max-w-none drop-shadow-sm"
+              style={{ width: '230.63%', left: '-65.32%', top: '-7.66%' }}
+            />
+          </div>
           <h1 className="font-serif text-5xl font-semibold italic tracking-tight text-[#174c87] sm:text-7xl">CA Prep Hub</h1>
           <div className="mt-4 flex items-center gap-3 text-sm tracking-[0.22em] text-[#38638d] sm:text-base">
             <span>Learn</span><span>•</span><span>Practice</span><span>•</span><span>Prepare</span><span>•</span><span>Achieve</span>
