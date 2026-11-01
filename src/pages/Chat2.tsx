@@ -1,16 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile, Clock3 } from 'lucide-react';
 import InstagramPlusButton from '../components/InstagramPlusButton';
-import MoodPicker from '../components/MoodPicker';
-import MoodDisplay from '../components/MoodDisplay';
-import ReplyToMoodPill from '../components/ReplyToMoodPill';
 import { useChat } from '../hooks/useChat';
-import { useMood } from '../hooks/useMood';
 import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTyping';
 import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
 import KissEmojiRain from '../components/KissEmojiRain';
 import RobotCloud from '../components/RobotCloud';
-import MoodReactor from '../components/MoodReactor';
 import { useMessageSeen } from '../hooks/useMessageSeen';
 import { useTabVisibility } from '../hooks/useTabVisibility';
 import TypingIndicator from '../components/TypingIndicator';
@@ -19,7 +14,6 @@ import { shouldAddSpacing, calculateSpacingForAllMessages } from '../lib/message
 import { onSnapshot, doc, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { db } from '../firebase';
 import { lastSeenDb } from '../firebase-lastseen';
-import { useMoodReactor } from '../hooks/useMoodReactor';
 import { useHugDetection } from '../hooks/useHugDetection';
 import { useLastSeen } from '../hooks/useLastSeen';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -59,11 +53,10 @@ interface Chat2Props {
   nickname: 'Vishwa' | 'Ammu';
   onLogout: () => void;
   onSwitchToAIChat: () => void;
-  onSwitchToChat3: () => void;
   onOpenCoupleMemory?: () => void;
 }
 
-function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCoupleMemory }: Chat2Props) {
+function Chat2({ nickname, onLogout, onSwitchToAIChat, onOpenCoupleMemory }: Chat2Props) {
   const handleAIClick = () => {
     onSwitchToAIChat();
   };
@@ -90,8 +83,6 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
   const [replyTo, setReplyTo] = useState<{ id: string; text: string; by: string } | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [selectedMessageForDelete, setSelectedMessageForDelete] = useState<string | null>(null);
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [replyToMood, setReplyToMood] = useState<{ emoji: string; partnerNickname: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showSchedulePhoto, setShowSchedulePhoto] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -181,7 +172,6 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
   });
 
   const { msgs, send, clear, deleteMessage, loading } = useChat('privateMessages', nickname);
-  const { userMood, otherUserMood, setMood, deleteMood } = useMood(nickname);
   const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
   useOptimizedActivity(nickname);
   const otherUserActive = useOtherUserActivity(nickname === 'Vishwa' ? 'Ammu' : 'Vishwa');
@@ -195,13 +185,6 @@ function Chat2({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat3, onOpenCo
   const isChatActive = isTabActive && memoryState !== "open";
 
   const { updateFrequentEmojis } = useFrequentEmojis(nickname);
-  const { isReactorActive, handleReactorComplete } = useMoodReactor({
-    userMood,
-    otherUserMood,
-    nickname,
-    selfTyping,
-    lastMessageTimestamp: msgs.length > 0 ? msgs[msgs.length - 1].ts : null
-  });
 
   const { pendingHugFrom, isPendingHug } = useHugDetection({
     messages: msgs,
@@ -584,7 +567,6 @@ const processNotificationQueue = async () => {
       const textToSend = message.trim();
       setMessage('');
       setReplyTo(null);
-      setReplyToMood(null);
       setSelfTyping(false);
       stopTyping();
 
@@ -593,15 +575,8 @@ const processNotificationQueue = async () => {
         finalTextToSend = `🤖 ${textToSend}`;
       }
 
-      const moodMetadata = replyToMood ? {
-        moodEmoji: replyToMood.emoji,
-        moodOwnerUserId: replyToMood.partnerNickname === 'Vishwa' ? 'Vishwa' : 'Ammu',
-        moodSetAt: new Date(),
-        isReplyToMood: true
-      } : undefined;
-
       try {
-        await send(finalTextToSend, 'text', undefined, undefined, moodMetadata, replyTo);
+        await send(finalTextToSend, 'text', undefined, undefined, undefined, replyTo);
         await sendMessageNotification(finalTextToSend);
 
         const emojisInMessage = extractEmojisFromText(finalTextToSend);
@@ -804,9 +779,6 @@ const processNotificationQueue = async () => {
   };
 
   const getPlaceholderText = () => {
-    if (replyToMood) {
-      return `Reply to ${replyToMood.partnerNickname}'s mood...`;
-    }
     return "Enter message...";
   };
 
@@ -928,7 +900,6 @@ const processNotificationQueue = async () => {
   return (
     <div className="h-full w-full bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
       <KissEmojiRain show={showKissRain} onComplete={() => setShowKissRain(false)} />
-      <MoodReactor isActive={isReactorActive} onComplete={handleReactorComplete} />
 
       {/* ── INLINE VOICE CALL UI ── */}
 
@@ -1219,27 +1190,6 @@ const processNotificationQueue = async () => {
         </div>
       </div>
 
-      {/* Mobile Moods */}
-      <div className="sm:hidden fixed top-14 left-0 right-0 z-40 flex justify-center px-2 pt-2">
-        <div className="flex flex-col items-center gap-1 bg-transparent rounded-b-3xl px-6 py-3">
-          <button
-            onClick={onSwitchToChat3}
-            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
-          >
-            Moods
-          </button>
-          
-          <MoodDisplay
-            userMood={userMood}
-            otherUserMood={otherUserMood}
-            nickname={nickname}
-            onOpenPicker={() => setShowMoodPicker(true)}
-            onReplyToMood={(emoji, partner) =>
-              setReplyToMood({ emoji, partnerNickname: partner })
-            }
-          />
-        </div>
-      </div>
 
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <div className="text-9xl opacity-10 text-gray-500">📚</div>
@@ -1402,14 +1352,6 @@ const processNotificationQueue = async () => {
       )}
 
       <div className="fixed bottom-0 left-0 right-0 bg-transparent p-4 z-50 ">
-        {replyToMood && (
-          <ReplyToMoodPill
-            emoji={replyToMood.emoji}
-            partnerNickname={replyToMood.partnerNickname}
-            onCancel={() => setReplyToMood(null)}
-          />
-        )}
-
         {replyTo && (
           <div className="bg-blue-100 p-2 mb-1 rounded relative text-sm text-gray-800">
             <span className="font-bold text-blue-800">Replying to AI </span>
@@ -1511,9 +1453,6 @@ const processNotificationQueue = async () => {
                     } else if (e.key === 'Escape') {
                       setSelfTyping(false);
                       stopTyping();
-                      if (replyToMood) {
-                        setReplyToMood(null);
-                      }
                     }
                   }}
                   onBlur={() => {
@@ -1546,14 +1485,6 @@ const processNotificationQueue = async () => {
           </div>
         </form>
       </div>
-
-      <MoodPicker
-        isOpen={showMoodPicker}
-        onClose={() => setShowMoodPicker(false)}
-        onSelectMood={setMood}
-        onDeleteMood={deleteMood}
-        currentMood={userMood?.emoji}
-      />
 
       {memoryState === "password" && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -1604,7 +1535,7 @@ const processNotificationQueue = async () => {
         <CoupleMemoryPage nickname={nickname} onExit={() => setMemoryState("closed")} />
       )}
 
-      <div className={`fixed inset-0 pointer-events-none overflow-hidden transition-opacity duration-500 ${showKissRain || isReactorActive ? 'opacity-0' : 'opacity-100'}`}>
+      <div className="fixed inset-0 pointer-events-none overflow-hidden transition-opacity duration-500">
             <div className="absolute top-20 left-5 text-green-200 text-2xl animate-bounce">📚</div>
         <div className="absolute top-40 right-8 text-emerald-200 text-xl animate-pulse">✏️</div>
         <div className="absolute bottom-32 left-12 text-teal-300 text-3xl animate-bounce">📖</div>

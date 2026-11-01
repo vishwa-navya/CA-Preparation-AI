@@ -124,11 +124,6 @@ export function useMemory(nickname: 'Vishwa' | 'Ammu') {
         memoryMessage.replyTo = message.replyTo;
       }
 
-      // Add mood metadata if exists
-      if (message.moodMetadata !== undefined && message.moodMetadata !== null) {
-        memoryMessage.moodMetadata = message.moodMetadata;
-      }
-
       // Save to Firebase
       await setDoc(
         doc(db, 'memory', nickname, 'messages', message.id),

@@ -199,15 +199,6 @@ function RobotCloudChat3({
           )}
 
           <div className={`message-bubble ${getBubbleRadius()} px-3 py-2 shadow-md ${isOwn ? 'border-none' : 'border'} relative group ${bgColor} ${textColor} inline-block overflow-hidden`} style={{ fontSize: '0.85rem', lineHeight: '1.2rem', width: `${dynamicWidth}px`, minWidth: '120px' }}>
-            {msg?.moodMetadata && (
-              <div className="pb-2 mb-2 border-b border-blue-300 bg-blue-50 -mx-3 px-3 py-2 rounded-t-xl">
-                <div className="text-xs text-blue-600 flex items-center gap-1 font-medium">
-                  <span className="text-sm">{msg.moodMetadata.moodEmoji}</span>
-                  <span>{isOwn ? `You replied to ${msg.moodMetadata.moodOwnerUserId === 'Vishwa' ? 'Vishwa' : 'Ammu'}'s mood` : `${msg.by === 'Vishwa' ? 'Vishwa' : 'Ammu'} replied to your mood`}</span>
-                </div>
-              </div>
-            )}
-
             {type === 'image' && imageUrl ? (
               <div className="pb-2">
                 <img src={imageUrl} alt={fileName || 'Shared image'} className="max-w-full h-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={handleImageClick} style={{ maxHeight: '300px', objectFit: 'cover' }} />

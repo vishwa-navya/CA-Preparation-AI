@@ -199,8 +199,6 @@ function App() {
   };
 
   const handleSwitchToAIChat = () => setCurrentPage('chat1');
-  const handleSwitchToChat2 = () => setCurrentPage('chat2');
-  const handleSwitchToChat3 = () => setCurrentPage('chat3');
   const handleOpenMemory = () => setCurrentPage('memory');
 
   // 🧭 LOGIN PAGE — reference-matched CA study desk
@@ -369,7 +367,6 @@ function App() {
         nickname={nickname as 'Vishwa' | 'Ammu'}
         onLogout={handleLogout}
         onSwitchToAIChat={handleSwitchToAIChat}
-        onSwitchToChat3={handleSwitchToChat3}
       />
     );
   }
@@ -380,7 +377,6 @@ function App() {
         nickname={nickname as 'Vishwa' | 'Ammu'}
         onLogout={handleLogout}
         onSwitchToAIChat={handleSwitchToAIChat}
-        onSwitchToChat2={handleSwitchToChat2}
         onOpenMemory={handleOpenMemory}
       />
     );

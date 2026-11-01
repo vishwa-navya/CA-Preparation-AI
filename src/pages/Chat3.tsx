@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { BookOpen, Send, LogOut, Plus, X, Sparkles, Camera, Smile, Heart, AlertCircle, Clock3 } from 'lucide-react';
 import InstagramPlusButton from '../components/InstagramPlusButton';
-import MoodPicker from '../components/MoodPicker';
-import MoodDisplay from '../components/MoodDisplay';
-import ReplyToMoodPill from '../components/ReplyToMoodPill';
 import { useChat } from '../hooks/useChat';
-import { useMood } from '../hooks/useMood';
 import { useOptimizedTyping, useTypingListener } from '../hooks/useOptimizedTyping';
 import { useOptimizedActivity, useOtherUserActivity } from '../hooks/useOptimizedActivity';
 import KissEmojiRain from '../components/KissEmojiRain';
@@ -13,7 +9,6 @@ import RobotCloudChat3 from '../components/RobotCloudChat3';
 import LovePulse from '../components/LovePulse';
 import { useLovePulse } from '../hooks/useLovePulse';
 import { useSilentReadSignal } from '../hooks/useSilentReadSignal';
-import MoodReactor from '../components/MoodReactor';
 import { useMessageSeen } from '../hooks/useMessageSeen';
 import { useTabVisibility } from '../hooks/useTabVisibility';
 import { useEmergencyExit } from '../hooks/useEmergencyExit';
@@ -23,7 +18,6 @@ import { calculateSpacingForAllMessages } from '../lib/messageSpacing';
 import { onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { lastSeenDb } from '../firebase-lastseen';
-import { useMoodReactor } from '../hooks/useMoodReactor';
 import { useHugDetection } from '../hooks/useHugDetection';
 import { useLastSeen } from '../hooks/useLastSeen';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -50,11 +44,10 @@ interface Chat3Props {
   nickname: 'Vishwa' | 'Ammu';
   onLogout: () => void;
   onSwitchToAIChat: () => void;
-  onSwitchToChat2: () => void;
   onOpenMemory?: () => void;
 }
 
-function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMemory }: Chat3Props) {
+function Chat3({ nickname, onLogout, onSwitchToAIChat, onOpenMemory }: Chat3Props) {
   useEmergencyExit(nickname);
 
   const [message, setMessage] = useState('');
@@ -72,8 +65,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   const [replyTo, setReplyTo] = useState<{ id: string; text: string; by: string } | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [selectedMessageForDelete, setSelectedMessageForDelete] = useState<string | null>(null);
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [replyToMood, setReplyToMood] = useState<{ emoji: string; partnerNickname: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showSchedulePhoto, setShowSchedulePhoto] = useState(false);
@@ -109,7 +100,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   });
 
   const { msgs, send, clear, deleteMessage, loading } = useChat('privateMessages', nickname);
-  const { userMood, otherUserMood, setMood, deleteMood } = useMood(nickname);
   const { handleTyping, stopTyping } = useOptimizedTyping(nickname);
   useOptimizedActivity(nickname);
   const otherUserActive = useOtherUserActivity(nickname === 'Vishwa' ? 'Ammu' : 'Vishwa');
@@ -142,13 +132,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
 
   const { updateFrequentEmojis } = useFrequentEmojis(nickname);
 
-  const { isReactorActive, handleReactorComplete } = useMoodReactor({
-    userMood,
-    otherUserMood,
-    nickname,
-    selfTyping,
-    lastMessageTimestamp: msgs.length > 0 ? msgs[msgs.length - 1].ts : null
-  });
 
   const { pendingHugFrom, isPendingHug } = useHugDetection({
     messages: msgs,
@@ -416,7 +399,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
       const textToSend = message.trim();
       setMessage('');
       setReplyTo(null);
-      setReplyToMood(null);
       setSelfTyping(false);
       stopTyping();
 
@@ -425,15 +407,8 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
         finalTextToSend = `🤖 ${textToSend}`;
       }
 
-      const moodMetadata = replyToMood ? {
-        moodEmoji: replyToMood.emoji,
-        moodOwnerUserId: replyToMood.partnerNickname === 'Vishwa' ? 'Vishwa' : 'Ammu',
-        moodSetAt: new Date(),
-        isReplyToMood: true
-      } : undefined;
-
       try {
-        await send(finalTextToSend, 'text', undefined, undefined, moodMetadata, replyTo);
+        await send(finalTextToSend, 'text', undefined, undefined, undefined, replyTo);
         await sendMessageNotification(finalTextToSend);
 
         const emojisInMessage = extractEmojisFromText(finalTextToSend);
@@ -746,9 +721,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
   };
 
   const getPlaceholderText = () => {
-    if (replyToMood) {
-      return `Reply to ${replyToMood.partnerNickname}'s mood...`;
-    }
     return "Enter message...";
   };
 
@@ -832,7 +804,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
       <div className="absolute inset-0 bg-black/10"></div>
 
       <KissEmojiRain show={showKissRain} onComplete={() => setShowKissRain(false)} />
-      <MoodReactor isActive={isReactorActive} onComplete={handleReactorComplete} />
 
       {isCameraOn && (
         <CameraButton
@@ -879,24 +850,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
                   lastSeen={otherUserLastSeen}
                   connectionStatus={connectionStatus}
                   className="text-xs text-white"
-                />
-              </div>
-            </div>
-
-            <div className="hidden sm:block flex-shrink-0">
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  onClick={onSwitchToChat2}
-                  className="text-xs font-medium text-blue-200 hover:text-white transition-colors cursor-pointer"
-                >
-                  Moods
-                </button>
-                <MoodDisplay
-                  userMood={userMood}
-                  otherUserMood={otherUserMood}
-                  nickname={nickname}
-                  onOpenPicker={() => setShowMoodPicker(true)}
-                  onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
                 />
               </div>
             </div>
@@ -949,31 +902,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
             </div>
           </div>
 
-          <div className="sm:hidden flex justify-center mt-3 pb-1">
-            <button
-              onClick={onSwitchToChat2}
-              className="text-xs font-medium text-blue-200 hover:text-white transition-colors cursor-pointer"
-            >
-              Moods
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="sm:hidden fixed top-16 left-0 right-0 z-40 flex justify-center px-4">
-        <div className="flex justify-center">
-          <div className="bg-transparent backdrop-blur-sm rounded-b-3xl px-6 py-2 shadow-lg border border-white/30 border-t-0 mt-4">
-            <div className="flex justify-center mb-1">
-              <span className="text-xs font-medium text-blue-200">Moods</span>
-            </div>
-            <MoodDisplay
-              userMood={userMood}
-              otherUserMood={otherUserMood}
-              nickname={nickname}
-              onOpenPicker={() => setShowMoodPicker(true)}
-              onReplyToMood={(emoji, partner) => setReplyToMood({ emoji, partnerNickname: partner })}
-            />
-          </div>
         </div>
       </div>
 
@@ -1165,14 +1093,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
       )}
 
       <div className="fixed bottom-0 left-0 right-0 bg-transparent p-4 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-        {replyToMood && (
-          <ReplyToMoodPill
-            emoji={replyToMood.emoji}
-            partnerNickname={replyToMood.partnerNickname}
-            onCancel={() => setReplyToMood(null)}
-          />
-        )}
-
         {replyTo && (
           <div className="bg-blue-100 p-2 mb-1 rounded relative text-sm text-gray-800">
             <span className="font-bold text-blue-800">Replying to {replyTo.by} </span>
@@ -1276,9 +1196,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
                     } else if (e.key === 'Escape') {
                       setSelfTyping(false);
                       stopTyping();
-                      if (replyToMood) {
-                        setReplyToMood(null);
-                      }
                     }
                   }}
                   onBlur={() => {
@@ -1312,13 +1229,6 @@ function Chat3({ nickname, onLogout, onSwitchToAIChat, onSwitchToChat2, onOpenMe
         </form>
       </div>
 
-      <MoodPicker
-        isOpen={showMoodPicker}
-        onClose={() => setShowMoodPicker(false)}
-        onSelectMood={setMood}
-        onDeleteMood={deleteMood}
-        currentMood={userMood?.emoji}
-      />
     </div>
   );
 }

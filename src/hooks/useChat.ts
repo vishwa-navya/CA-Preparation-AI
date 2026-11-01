@@ -87,7 +87,7 @@ export function useChat(collectionName: string, nickname?: string) {
     type: string = "text",
     imageUrl?: string,
     fileName?: string,
-    moodMetadata?: any,
+    _moodMetadata?: any,
     replyTo?: { id: string; text: string; by: string } | null,
     videoUrl?: string,
     fileUrl?: string,
@@ -101,7 +101,6 @@ export function useChat(collectionName: string, nickname?: string) {
         to:              "all",
         replyTo:         replyTo || null,
         seenBy:          [],
-        moodMetadata:    moodMetadata || null,
         clientTimestamp: new Date().toISOString(),
         deletedFor:      [], // used only by header dustbin (per-user delete)
       };
@@ -123,7 +122,6 @@ export function useChat(collectionName: string, nickname?: string) {
         messageData.text         = text;
         messageData.by           = "System";
         messageData.replyTo      = null;
-        messageData.moodMetadata = null;
       } else {
         messageData.text = text;
       }
